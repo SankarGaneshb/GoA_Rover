@@ -3,21 +3,49 @@
  * Injected in the Main World to intercept window.fetch and XMLHttpRequest.
  */
 
-(function () {
-  if (window.__GOA_ROVER_INTERCEPTOR__) return;
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  } else {
+    root.NetworkInterceptor = factory();
+    if (typeof window !== 'undefined' && !window.__GOA_ROVER_INTERCEPTOR__) {
+      window.__GOA_ROVER_INTERCEPTOR__ = new root.NetworkInterceptor();
+    }
+  }
+})(typeof self !== 'undefined' ? self : this, function () {
 
   class NetworkInterceptor {
-    constructor() {
+    constructor(options = {}) {
       this.records = [];
-      this.tamperRules = new Map(); // url -> mockResponse
-      this.initFetchProxy();
-      this.initXHRProxy();
-      console.log('[GoA_Rover] 🌐 Layer 2: Network Interceptor active');
+      this.tamperRules = new Map();
+      this.listeners = [];
+      this.options = Object.assign({
+        autoInit: true,
+        maxRecords: 100
+      }, options);
+
+      this.origFetch = null;
+      this.origXHROpen = null;
+      this.origXHRSend = null;
+
+      if (this.options.autoInit) {
+        this.initFetchProxy();
+        this.initXHRProxy();
+      }
+    }
+
+    onNetworkEvent(cb) {
+      if (typeof cb === 'function') this.listeners.push(cb);
     }
 
     setTamperRule(urlPattern, mockResponse) {
+      if (!urlPattern || typeof mockResponse !== 'object') return false;
       this.tamperRules.set(urlPattern, mockResponse);
-      console.log(`[GoA_Rover] 🎛️ Mock rule added for ${urlPattern}`);
+      return true;
+    }
+
+    removeTamperRule(urlPattern) {
+      return this.tamperRules.delete(urlPattern);
     }
 
     clearTamperRules() {
@@ -25,37 +53,64 @@
     }
 
     recordExchange(record) {
+      if (!record || typeof record !== 'object') return;
       this.records.push(record);
-      if (this.records.length > 100) this.records.shift();
-      window.postMessage({ source: 'GOA_ROVER_NETWORK', payload: record }, '*');
+      if (this.records.length > this.options.maxRecords) {
+        this.records.shift();
+      }
+
+      this.listeners.forEach((cb) => {
+        try { cb(record); } catch (e) {}
+      });
+
+      if (typeof window !== 'undefined' && typeof window.postMessage === 'function') {
+        try {
+          window.postMessage({ source: 'GOA_ROVER_NETWORK', payload: record }, '*');
+        } catch (e) {}
+      }
     }
 
     initFetchProxy() {
-      const originalFetch = window.fetch;
+      if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+      if (this.origFetch) return; // already proxied
+
+      this.origFetch = window.fetch;
       const self = this;
 
       window.fetch = async function (...args) {
-        const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
-        const method = (args[1] && args[1].method) || 'GET';
-        const startTime = performance.now();
+        let url = '';
+        try {
+          url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || String(args[0]);
+        } catch (e) {
+          url = 'unknown-url';
+        }
 
-        // Check if there is an active tamper/mock rule for this URL
+        const method = (args[1] && args[1].method) ? args[1].method.toUpperCase() : 'GET';
+        const startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+        // Check tamper rules
         for (const [pattern, mockData] of self.tamperRules.entries()) {
           if (url.includes(pattern)) {
-            console.log(`[GoA_Rover] 🎭 Tampering response for ${url}`);
-            const bodyStr = typeof mockData.body === 'string' ? mockData.body : JSON.stringify(mockData.body);
-            const mockedResponse = new Response(bodyStr, {
-              status: mockData.status || 200,
-              statusText: mockData.statusText || 'OK',
-              headers: new Headers(mockData.headers || { 'Content-Type': 'application/json' })
-            });
+            const bodyStr = typeof mockData.body === 'string' ? mockData.body : JSON.stringify(mockData.body || {});
+            const status = mockData.status || 200;
+            const statusText = mockData.statusText || 'OK';
 
+            let headers;
+            try {
+              headers = new Headers(mockData.headers || { 'Content-Type': 'application/json' });
+            } catch (e) {
+              headers = mockData.headers || {};
+            }
+
+            const mockedResponse = new Response(bodyStr, { status, statusText, headers });
+
+            const duration = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - startTime;
             self.recordExchange({
               id: Math.random().toString(36).substring(7),
               url,
               method,
-              status: mockData.status || 200,
-              duration: performance.now() - startTime,
+              status,
+              duration,
               timestamp: Date.now(),
               tampered: true,
               responseBody: bodyStr
@@ -66,34 +121,50 @@
         }
 
         try {
-          const response = await originalFetch.apply(this, args);
-          const clone = response.clone();
-          const duration = performance.now() - startTime;
+          const response = await self.origFetch.apply(this, args);
+          const duration = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - startTime;
 
-          clone.text().then((text) => {
-            self.recordExchange({
-              id: Math.random().toString(36).substring(7),
-              url,
-              method,
-              status: response.status,
-              duration,
-              timestamp: Date.now(),
-              tampered: false,
-              responseBody: text
+          try {
+            const clone = response.clone();
+            clone.text().then((text) => {
+              self.recordExchange({
+                id: Math.random().toString(36).substring(7),
+                url,
+                method,
+                status: response.status,
+                duration,
+                timestamp: Date.now(),
+                tampered: false,
+                responseBody: text
+              });
+            }).catch(() => {
+              self.recordExchange({
+                id: Math.random().toString(36).substring(7),
+                url,
+                method,
+                status: response.status,
+                duration,
+                timestamp: Date.now(),
+                tampered: false,
+                responseBody: ''
+              });
             });
-          }).catch(() => {});
+          } catch (e) {
+            // response clone failed (e.g. streaming already locked)
+          }
 
           return response;
         } catch (error) {
+          const duration = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - startTime;
           self.recordExchange({
             id: Math.random().toString(36).substring(7),
             url,
             method,
             status: 0,
-            duration: performance.now() - startTime,
+            duration,
             timestamp: Date.now(),
             tampered: false,
-            error: error.message
+            error: error ? error.message : 'Network error'
           });
           throw error;
         }
@@ -101,34 +172,60 @@
     }
 
     initXHRProxy() {
+      if (typeof XMLHttpRequest === 'undefined') return;
+      if (this.origXHROpen) return; // already proxied
+
+      this.origXHROpen = XMLHttpRequest.prototype.open;
+      this.origXHRSend = XMLHttpRequest.prototype.send;
       const self = this;
-      const originalOpen = XMLHttpRequest.prototype.open;
-      const originalSend = XMLHttpRequest.prototype.send;
 
       XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-        this._goaUrl = url;
-        this._goaMethod = method;
-        this._goaStartTime = performance.now();
-        return originalOpen.apply(this, [method, url, ...rest]);
+        try {
+          this._goaUrl = String(url);
+          this._goaMethod = String(method).toUpperCase();
+          this._goaStartTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        } catch (e) {}
+        return self.origXHROpen.apply(this, [method, url, ...rest]);
       };
 
       XMLHttpRequest.prototype.send = function (body) {
-        this.addEventListener('load', () => {
-          self.recordExchange({
-            id: Math.random().toString(36).substring(7),
-            url: this._goaUrl,
-            method: this._goaMethod,
-            status: this.status,
-            duration: performance.now() - (this._goaStartTime || performance.now()),
-            timestamp: Date.now(),
-            tampered: false,
-            responseBody: this.responseText
+        try {
+          this.addEventListener('load', () => {
+            try {
+              const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+              self.recordExchange({
+                id: Math.random().toString(36).substring(7),
+                url: this._goaUrl || '',
+                method: this._goaMethod || 'GET',
+                status: this.status,
+                duration: now - (this._goaStartTime || now),
+                timestamp: Date.now(),
+                tampered: false,
+                responseBody: this.responseText || ''
+              });
+            } catch (e) {}
           });
-        });
-        return originalSend.apply(this, [body]);
+        } catch (e) {}
+        return self.origXHRSend.apply(this, [body]);
       };
+    }
+
+    destroy() {
+      if (this.origFetch && typeof window !== 'undefined') {
+        window.fetch = this.origFetch;
+        this.origFetch = null;
+      }
+      if (this.origXHROpen && typeof XMLHttpRequest !== 'undefined') {
+        XMLHttpRequest.prototype.open = this.origXHROpen;
+        XMLHttpRequest.prototype.send = this.origXHRSend;
+        this.origXHROpen = null;
+        this.origXHRSend = null;
+      }
+      this.tamperRules.clear();
+      this.records = [];
+      this.listeners = [];
     }
   }
 
-  window.__GOA_ROVER_INTERCEPTOR__ = new NetworkInterceptor();
-})();
+  return NetworkInterceptor;
+});
