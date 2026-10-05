@@ -28,7 +28,8 @@
       "resources": [
         "injected/perception-engine.js",
         "injected/network-interceptor.js",
-        "injected/state-recorder.js"
+        "injected/state-recorder.js",
+        "injected/framework-decompiler.js"
       ],
       "matches": ["<all_urls>"]
     }
