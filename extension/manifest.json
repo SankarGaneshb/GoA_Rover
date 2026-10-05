@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "GoA_Rover - In-Situ Developer Guardian",
+  "version": "1.0.0",
+  "description": "Zero-friction in-situ developer sidecar for web apps. Replaces DevTools, Postman, and React DevTools.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost/*", "http://127.0.0.1/*", "<all_urls>"],
+      "js": ["content/content-script.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "injected/perception-engine.js",
+        "injected/network-interceptor.js",
+        "injected/state-recorder.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "GoA_Rover HUD & Scorecard"
+  }
+}

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GoA_Rover Perception & Interception Testbed</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 40px;
+      line-height: 1.6;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .panel {
+      background: white;
+      padding: 24px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    }
+    button {
+      background: #0284c7;
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    button:hover {
+      background: #0369a1;
+    }
+    .danger { background: #e11d48; }
+    .danger:hover { background: #be123c; }
+    .log-box {
+      background: #0f172a;
+      color: #38bdf8;
+      font-family: monospace;
+      padding: 16px;
+      border-radius: 6px;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+    #shifting-box {
+      transition: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 GoA_Rover Synthetic Verification Testbed</h1>
+  <p>Trigger synthetic edge-case anomalies to verify Perception Engine (M1) and Network Proxy + 30s Buffer (M2).</p>
+
+  <div class="panel">
+    <h2>1. Perception Anomalies (M1)</h2>
+    <button id="btn-cls">Trigger Layout Shift (CLS)</button>
+    <button id="btn-loaf" class="danger">Trigger Long Animation Frame (120ms freeze)</button>
+    <button id="btn-churn">Trigger Rapid DOM Churn (200 mutations)</button>
+    <div id="shifting-box"></div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Network Proxy & Tamper Sandbox (M2)</h2>
+    <button id="btn-fetch-ok">Fetch Normal API</button>
+    <button id="btn-fetch-broken" class="danger">Fetch Broken API (null items)</button>
+    <button id="btn-tamper-rule">Register Tamper Mock (Force Fix in-situ)</button>
+  </div>
+
+  <div class="panel">
+    <h2>3. Perception & Buffer Event Stream</h2>
+    <div class="log-box" id="event-stream">Waiting for events...</div>
+  </div>
+
+  <!-- Load injected scripts directly for synthetic stand-alone testbed -->
+  <script src="../extension/injected/perception-engine.js"></script>
+  <script src="../extension/injected/network-interceptor.js"></script>
+  <script src="../extension/injected/state-recorder.js"></script>
+
+  <script>
+    const stream = document.getElementById('event-stream');
+    function logEvent(text) {
+      const line = document.createElement('div');
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      stream.prepend(line);
+    }
+
+    window.addEventListener('message', (e) => {
+      if (e.data?.source === 'GOA_ROVER_PERCEPTION') {
+        const p = e.data.payload;
+        logEvent(`[PERCEPTION] ${p.type.toUpperCase()} (${p.severity}) - ${p.details.message}`);
+      } else if (e.data?.source === 'GOA_ROVER_NETWORK') {
+        const net = e.data.payload;
+        logEvent(`[NETWORK] ${net.method} ${net.url} (${net.status}) ${net.tampered ? '🎭 TAMPERED' : ''}`);
+      }
+    });
+
+    // 1. CLS simulation
+    document.getElementById('btn-cls').addEventListener('click', () => {
+      const box = document.getElementById('shifting-box');
+      const shift = document.createElement('div');
+      shift.style.height = '120px';
+      shift.style.background = '#fef08a';
+      shift.style.marginBottom = '12px';
+      shift.textContent = '⚡ Sudden unexpected layout insertion without reserved height';
+      box.prepend(shift);
+    });
+
+    // 2. LoAF freeze simulation
+    document.getElementById('btn-loaf').addEventListener('click', () => {
+      const start = performance.now();
+      while (performance.now() - start < 120) {
+        // Block main thread synchronously
+      }
+      logEvent('Synchronous 120ms blocking loop completed');
+    });
+
+    // 3. DOM Churn simulation
+    document.getElementById('btn-churn').addEventListener('click', () => {
+      const parent = document.createElement('div');
+      document.body.appendChild(parent);
+      for (let i = 0; i < 200; i++) {
+        const span = document.createElement('span');
+        span.textContent = i;
+        parent.appendChild(span);
+      }
+      setTimeout(() => parent.remove(), 500);
+    });
+
+    // 4. Fetch Normal API
+    document.getElementById('btn-fetch-ok').addEventListener('click', () => {
+      fetch('https://jsonplaceholder.typicode.com/todos/1')
+        .then(res => res.json())
+        .then(data => logEvent('Received normal todo: ' + JSON.stringify(data)));
+    });
+
+    // 5. Fetch Broken API
+    document.getElementById('btn-fetch-broken').addEventListener('click', () => {
+      fetch('https://jsonplaceholder.typicode.com/broken-endpoint')
+        .then(res => res.json())
+        .catch(err => logEvent('Caught expected error from broken endpoint: ' + err.message));
+    });
+
+    // 6. Register Tamper Rule
+    document.getElementById('btn-tamper-rule').addEventListener('click', () => {
+      if (window.__GOA_ROVER_INTERCEPTOR__) {
+        window.__GOA_ROVER_INTERCEPTOR__.setTamperRule('broken-endpoint', {
+          status: 200,
+          body: { id: 999, title: "Fixed in-situ by GoA_Rover Tamper Sandbox", completed: true }
+        });
+        logEvent('Tamper rule installed for "broken-endpoint". Try clicking "Fetch Broken API" now!');
+      }
+    });
+  </script>
+</body>
+</html>

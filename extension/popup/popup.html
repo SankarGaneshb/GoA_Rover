@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GoA_Rover HUD & Scorecard</title>
+  <style>
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .badge {
+      font-size: 11px;
+      background: #1e293b;
+      color: #94a3b8;
+      padding: 3px 8px;
+      border-radius: 9999px;
+    }
+    .card {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      border: 1px solid #334155;
+    }
+    .card-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    .card-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .subtext {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      text-align: center;
+      background: #2563eb;
+      color: white;
+      text-decoration: none;
+      padding: 8px 0;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background: #1d4ed8;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">GoA_Rover</div>
+    <div class="badge">v1.0.0</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Real-Time RoI Unlocked</div>
+    <div class="card-value" id="val-roi">⚡ 0m saved ($0.00)</div>
+    <div class="subtext">Based on local inner-loop bug resolutions</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Hunter Rank & XP</div>
+    <div class="card-value" id="val-xp">Lvl 1 Scout (0 XP)</div>
+    <div class="subtext">Next Rank: DOM Detective (+300 XP)</div>
+  </div>
+
+  <button class="btn" id="btn-export">Export Standup Report</button>
+
+  <script src="popup.js"></script>
+</body>
+</html>
