@@ -14,11 +14,12 @@
     "testEnvironment": "jsdom",
     "collectCoverageFrom": [
       "extension/injected/**/*.js",
+      "extension/lib/**/*.js",
       "!**/node_modules/**"
     ],
     "coverageThreshold": {
       "global": {
-        "branches": 55,
+        "branches": 60,
         "functions": 80,
         "lines": 80,
         "statements": 80
