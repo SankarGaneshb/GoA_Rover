@@ -435,11 +435,15 @@
                   parentStyle.flexDirection !== 'column') {
                 const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: el.offsetWidth || 0 };
                 if (rect.width === 0 && (el.textContent || '').trim().length > 0) {
+                  if (!el.id) {
+                    el.dataset.goaTarget = 'target-' + Math.random().toString(36).substring(7);
+                  }
+                  const selector = el.id ? '#' + el.id : `[data-goa-target="${el.dataset.goaTarget}"]`;
                   const defect = {
                     defectType: 'flex_collapse',
-                    targetSelector: el.tagName + (el.id ? '#' + el.id : el.className ? '.' + el.className.split(' ').join('.') : ''),
-                    message: `Flex child collapsed to 0px width (${el.tagName})`,
-                    element: el
+                    targetSelector: selector,
+                    targetTag: el.tagName,
+                    message: `Flex child collapsed to 0px width (${el.tagName})`
                   };
                   defects.push(defect);
                   this.dispatch({
@@ -456,11 +460,15 @@
             if (style.overflow === 'hidden' || style.overflowX === 'hidden') {
               if (el.scrollWidth > el.clientWidth && el.clientWidth > 0) {
                 if (style.textOverflow !== 'ellipsis') {
+                  if (!el.id) {
+                    el.dataset.goaTarget = 'target-' + Math.random().toString(36).substring(7);
+                  }
+                  const selector = el.id ? '#' + el.id : `[data-goa-target="${el.dataset.goaTarget}"]`;
                   const defect = {
                     defectType: 'overflow_clipping',
-                    targetSelector: el.tagName + (el.id ? '#' + el.id : ''),
-                    message: `Text clipped by overflow:hidden without text-overflow:ellipsis (${el.scrollWidth}px content in ${el.clientWidth}px container)`,
-                    element: el
+                    targetSelector: selector,
+                    targetTag: el.tagName,
+                    message: `Text clipped by overflow:hidden without text-overflow:ellipsis (${el.scrollWidth}px content in ${el.clientWidth}px container)`
                   };
                   defects.push(defect);
                   this.dispatch({

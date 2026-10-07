@@ -347,29 +347,39 @@
         remediationBox.innerHTML = `<strong>CSS Layout Defect Detected:</strong><br/>${defect.message}<br/><code style="color:#67e8f9;">Fix: flex-shrink: 0; min-width: 0;</code>`;
         btnLiveFix.style.display = 'inline-block';
         btnLiveFix.onclick = () => {
-          if (defect.element) {
-            defect.element.style.flexShrink = '0';
-            defect.element.style.minWidth = 'fit-content';
+          const targetEl = document.querySelector(defect.targetSelector);
+          if (targetEl) {
+            targetEl.style.flexShrink = '0';
+            targetEl.style.minWidth = 'fit-content';
             remediationBox.innerHTML = `<span style="color:#4ade80;">✅ Applied live DOM fix: flex-shrink: 0; min-width: fit-content;</span>`;
             btnLiveFix.style.display = 'none';
+
+            // Award RoI on explicit user fix action
+            store.minutesSaved += 25;
+            store.totalXP += 50;
+            updateBadgeUI();
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+              chrome.storage.local.set({
+                minutesSaved: store.minutesSaved,
+                totalXP: store.totalXP
+              });
+            }
           }
         };
       } else if (p.type === 'script_error' || p.type === 'unhandled_rejection') {
         remediationBox.innerHTML = `<strong>Script Error Trapped:</strong><br/>${p.details.message}<br/><code style="color:#67e8f9;">Suggested Guard: (data || []).map(...) or data?.prop</code>`;
         btnLiveFix.style.display = 'none';
-      }
 
-      // Increment RoI minutes saved & award XP on anomaly caught
-      const netMin = p.severity === 'critical' ? 42 : 25;
-      store.minutesSaved += netMin;
-      store.totalXP += 50;
-      updateBadgeUI();
-
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({
-          minutesSaved: store.minutesSaved,
-          totalXP: store.totalXP
-        });
+        // Award RoI on critical script crash detection
+        store.minutesSaved += 42;
+        store.totalXP += 75;
+        updateBadgeUI();
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+          chrome.storage.local.set({
+            minutesSaved: store.minutesSaved,
+            totalXP: store.totalXP
+          });
+        }
       }
     } else if (event.data.source === 'GOA_ROVER_NETWORK') {
       store.networkLogs.unshift(event.data.payload);
