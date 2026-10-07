@@ -24,6 +24,7 @@
   injectScript('injected/state-recorder.js');
   injectScript('injected/framework-decompiler.js');
   injectScript('lib/auto-fixer.js');
+  injectScript('lib/fs-workspace.js');
 
   // 2. State Store inside Content Script
   const store = {
@@ -283,7 +284,15 @@
         <div id="remediation-box" style="background:#1e293b; padding:8px; border-radius:6px; font-family:monospace; font-size:11px; margin-bottom:6px; color:#fde047;">
           No active repair needed.
         </div>
-        <button class="btn-action" id="btn-live-fix" style="background:#16a34a; display:none;">🛠️ Auto-Fix in Live DOM</button>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">
+          <button class="btn-action" id="btn-live-fix" style="background:#16a34a; display:none;">🛠️ Auto-Fix in Live DOM</button>
+          <button class="btn-action" id="btn-disk-patch" style="background:#8b5cf6; display:none;">💾 1-Click Patch Source on Disk</button>
+          <button class="btn-action" id="btn-copy-diff" style="background:#475569; display:none;">📋 Copy Diff</button>
+        </div>
+        <div id="workspace-status" style="font-size:10px; color:#94a3b8; margin-top:6px; font-family:monospace;">
+          📁 Workspace: <span id="workspace-name" style="color:#fde047;">Not connected</span> 
+          <a href="#" id="link-connect-ws" style="color:#38bdf8; text-decoration:underline; margin-left:6px;">[Connect Project Folder]</a>
+        </div>
 
         <div class="section-title">Active Perception Stream</div>
         <div id="event-list">No anomalies detected yet.</div>
@@ -318,6 +327,31 @@
   const lifetimeScoreEl = shadow.getElementById('lifetime-score');
   const lifetimeBugEl = shadow.getElementById('lifetime-bug-count');
   const btnResetTab = shadow.getElementById('btn-reset-tab');
+  const btnDiskPatch = shadow.getElementById('btn-disk-patch');
+  const btnCopyDiff = shadow.getElementById('btn-copy-diff');
+  const workspaceNameEl = shadow.getElementById('workspace-name');
+  const linkConnectWs = shadow.getElementById('link-connect-ws');
+
+  let activePatch = null;
+  let workspaceDirHandle = null;
+
+  if (linkConnectWs) {
+    linkConnectWs.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        if (typeof window.showDirectoryPicker === 'function') {
+          workspaceDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+          workspaceNameEl.textContent = workspaceDirHandle.name;
+          workspaceNameEl.style.color = '#4ade80';
+          linkConnectWs.textContent = '[Change]';
+        } else {
+          alert('File System Access API is not supported in this browser tab.');
+        }
+      } catch (err) {
+        // User cancelled picker
+      }
+    });
+  }
 
   updateBadgeUI = function () {
     if (roiCounter) {
@@ -451,7 +485,17 @@
       if (p.type === 'css_layout_defect') {
         const defect = p.details;
         remediationBox.innerHTML = `<strong>CSS Layout Defect Detected:</strong><br/>${defect.message}<br/><code style="color:#67e8f9;">Fix: flex-shrink: 0; min-width: 0;</code>`;
+        
+        activePatch = {
+          type: 'css',
+          selector: defect.targetSelector,
+          diff: `/* CSS Hot-Patch for ${defect.targetSelector} */\n${defect.targetSelector} {\n+  flex-shrink: 0;\n+  min-width: fit-content;\n}`
+        };
+
         btnLiveFix.style.display = 'inline-block';
+        btnDiskPatch.style.display = 'inline-block';
+        btnCopyDiff.style.display = 'inline-block';
+
         btnLiveFix.onclick = () => {
           const targetEl = document.querySelector(defect.targetSelector);
           if (targetEl) {
@@ -466,10 +510,54 @@
         };
       } else if (p.type === 'script_error' || p.type === 'unhandled_rejection') {
         remediationBox.innerHTML = `<strong>Script Error Trapped:</strong><br/>${p.details.message}<br/><code style="color:#67e8f9;">Suggested Guard: (data || []).map(...) or data?.prop</code>`;
+        
+        activePatch = {
+          type: 'script',
+          filename: p.details.filename,
+          lineno: p.details.lineno,
+          diff: `// Guard at ${p.details.filename || 'script'}:${p.details.lineno || 1}\n- data.items.map(...)\n+ (data?.items || []).map(...)`
+        };
+
         btnLiveFix.style.display = 'none';
+        btnDiskPatch.style.display = 'inline-block';
+        btnCopyDiff.style.display = 'inline-block';
 
         // Award RoI on critical script crash detection
         awardRoI(42, 75);
+      }
+
+      if (btnCopyDiff) {
+        btnCopyDiff.onclick = () => {
+          if (activePatch) {
+            navigator.clipboard.writeText(activePatch.diff).then(() => {
+              alert('Diff copied to clipboard!\n\n' + activePatch.diff);
+            });
+          }
+        };
+      }
+
+      if (btnDiskPatch) {
+        btnDiskPatch.onclick = async () => {
+          if (!workspaceDirHandle) {
+            alert('Please connect your project folder first using "[Connect Project Folder]" above!');
+            return;
+          }
+          if (!activePatch) return;
+
+          try {
+            // Write a .goa-rover-fix.patch file to the root of their workspace project
+            const patchFileHandle = await workspaceDirHandle.getFileHandle('goa-rover-fix.patch', { create: true });
+            const writable = await patchFileHandle.createWritable();
+            await writable.write(activePatch.diff);
+            await writable.close();
+
+            remediationBox.innerHTML = `<span style="color:#a78bfa;">💾 Successfully written 'goa-rover-fix.patch' to project folder root!</span>`;
+            btnDiskPatch.style.display = 'none';
+            awardRoI(30, 60);
+          } catch (err) {
+            alert('File write failed: ' + (err ? err.message : err));
+          }
+        };
       }
     } else if (event.data.source === 'GOA_ROVER_NETWORK') {
       const net = event.data.payload;

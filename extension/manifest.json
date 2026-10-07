@@ -39,7 +39,8 @@
         "injected/network-interceptor.js",
         "injected/state-recorder.js",
         "injected/framework-decompiler.js",
-        "lib/auto-fixer.js"
+        "lib/auto-fixer.js",
+        "lib/fs-workspace.js"
       ],
       "matches": [
         "http://localhost/*",
