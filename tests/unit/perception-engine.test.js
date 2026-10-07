@@ -109,9 +109,9 @@ describe('Layer 1: PerceptionEngine', () => {
       getEntries: () => [
         {
           duration: 180,
-          startTime: 400,
-          renderStart: 500,
-          styleAndLayoutStart: 450,
+          startTime: 1000,
+          renderStart: 1100,
+          styleAndLayoutStart: 1050,
           scripts: [
             {
               invoker: 'setTimeout',

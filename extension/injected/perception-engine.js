@@ -156,6 +156,11 @@
         const observer = new PerformanceObserver((list) => {
           try {
             for (const entry of list.getEntries()) {
+              // Ignore initial bootstrap script compilation during first 800ms unless severe freeze (>300ms)
+              if ((entry.startTime || 0) < 800 && (entry.duration || 0) < 300) {
+                continue;
+              }
+
               const culpritScripts = Array.isArray(entry.scripts)
                 ? entry.scripts.map((s) => ({
                     invoker: s ? s.invoker : undefined,
@@ -202,6 +207,11 @@
         const observer = new PerformanceObserver((list) => {
           try {
             for (const entry of list.getEntries()) {
+              // Ignore initial bootstrap script compilation during first 800ms unless severe freeze (>300ms)
+              if ((entry.startTime || 0) < 800 && (entry.duration || 0) < 300) {
+                continue;
+              }
+
               if (entry.duration > 50) {
                 this.dispatch({
                   type: 'loaf_jank',
