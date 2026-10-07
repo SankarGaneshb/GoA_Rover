@@ -23,6 +23,7 @@
   injectScript('injected/network-interceptor.js');
   injectScript('injected/state-recorder.js');
   injectScript('injected/framework-decompiler.js');
+  injectScript('lib/auto-fixer.js');
 
   // 2. State Store inside Content Script
   const store = {
@@ -237,6 +238,12 @@
         <textarea class="tamper-area" id="tamper-json" placeholder='{"status": 200, "data": []}'></textarea>
         <button class="btn-action" id="btn-apply-tamper">Re-inject & Replay Payload</button>
 
+        <div class="section-title">In-Situ Auto-Remediation (CSS & Script Fixes)</div>
+        <div id="remediation-box" style="background:#1e293b; padding:8px; border-radius:6px; font-family:monospace; font-size:11px; margin-bottom:6px; color:#fde047;">
+          No active repair needed.
+        </div>
+        <button class="btn-action" id="btn-live-fix" style="background:#16a34a; display:none;">🛠️ Auto-Fix in Live DOM</button>
+
         <div class="section-title">Active Perception Stream</div>
         <div id="event-list">No anomalies detected yet.</div>
       </div>
@@ -261,6 +268,8 @@
   const scrubberTime = shadow.getElementById('scrubber-time');
   const tamperJson = shadow.getElementById('tamper-json');
   const btnTamper = shadow.getElementById('btn-apply-tamper');
+  const remediationBox = shadow.getElementById('remediation-box');
+  const btnLiveFix = shadow.getElementById('btn-live-fix');
   const eventList = shadow.getElementById('event-list');
 
   function updateBadgeUI() {
@@ -331,6 +340,24 @@
       }
 
       renderEventList();
+
+      // Check if event is remediable (CSS defect or Script error)
+      if (p.type === 'css_layout_defect') {
+        const defect = p.details;
+        remediationBox.innerHTML = `<strong>CSS Layout Defect Detected:</strong><br/>${defect.message}<br/><code style="color:#67e8f9;">Fix: flex-shrink: 0; min-width: 0;</code>`;
+        btnLiveFix.style.display = 'inline-block';
+        btnLiveFix.onclick = () => {
+          if (defect.element) {
+            defect.element.style.flexShrink = '0';
+            defect.element.style.minWidth = 'fit-content';
+            remediationBox.innerHTML = `<span style="color:#4ade80;">✅ Applied live DOM fix: flex-shrink: 0; min-width: fit-content;</span>`;
+            btnLiveFix.style.display = 'none';
+          }
+        };
+      } else if (p.type === 'script_error' || p.type === 'unhandled_rejection') {
+        remediationBox.innerHTML = `<strong>Script Error Trapped:</strong><br/>${p.details.message}<br/><code style="color:#67e8f9;">Suggested Guard: (data || []).map(...) or data?.prop</code>`;
+        btnLiveFix.style.display = 'none';
+      }
 
       // Increment RoI minutes saved & award XP on anomaly caught
       const netMin = p.severity === 'critical' ? 42 : 25;

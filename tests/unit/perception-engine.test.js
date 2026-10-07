@@ -197,6 +197,67 @@ describe('Layer 1: PerceptionEngine', () => {
     });
   });
 
+  test('traps global window.onerror script exceptions', (done) => {
+    engine = new PerceptionEngine({ autoInit: true });
+
+    engine.onPerception((event) => {
+      if (event.type === 'script_error') {
+        expect(event.severity).toBe('critical');
+        expect(event.details.message).toContain('TypeError in legacy script');
+        expect(event.details.lineno).toBe(15);
+        done();
+      }
+    });
+
+    const errorEvent = new Event('error');
+    errorEvent.message = 'TypeError in legacy script';
+    errorEvent.filename = 'legacy.js';
+    errorEvent.lineno = 15;
+    window.dispatchEvent(errorEvent);
+  });
+
+  test('traps unhandled promise rejections', (done) => {
+    engine = new PerceptionEngine({ autoInit: true });
+
+    engine.onPerception((event) => {
+      if (event.type === 'unhandled_rejection') {
+        expect(event.severity).toBe('critical');
+        expect(event.details.message).toContain('API network failure');
+        done();
+      }
+    });
+
+    const rejEvent = new Event('unhandledrejection');
+    rejEvent.reason = new Error('API network failure');
+    window.dispatchEvent(rejEvent);
+  });
+
+  test('scans and detects CSS layout defects (flex collapse)', () => {
+    engine = new PerceptionEngine({ autoInit: true });
+
+    const flexParent = document.createElement('div');
+    flexParent.style.display = 'flex';
+
+    const child = document.createElement('span');
+    child.textContent = 'Collapsed content';
+    child.getBoundingClientRect = () => ({ width: 0, height: 0 });
+    flexParent.appendChild(child);
+    document.body.appendChild(flexParent);
+
+    // Mock getComputedStyle
+    const origGetComputedStyle = window.getComputedStyle;
+    window.getComputedStyle = jest.fn((el) => {
+      if (el === flexParent) return { display: 'flex', flexDirection: 'row' };
+      return { display: 'inline', overflow: 'visible', textOverflow: 'clip' };
+    });
+
+    const defects = engine.scanDOMForCSSDefects(document.body);
+    expect(defects.length).toBeGreaterThan(0);
+    expect(defects[0].defectType).toBe('flex_collapse');
+
+    window.getComputedStyle = origGetComputedStyle;
+  });
+
   test('handles observer creation failure gracefully with fallback', () => {
     global.PerformanceObserver = jest.fn().mockImplementation(() => {
       throw new Error('PerformanceObserver not available');

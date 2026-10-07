@@ -34,7 +34,8 @@
         "injected/perception-engine.js",
         "injected/network-interceptor.js",
         "injected/state-recorder.js",
-        "injected/framework-decompiler.js"
+        "injected/framework-decompiler.js",
+        "lib/auto-fixer.js"
       ],
       "matches": ["<all_urls>"]
     }

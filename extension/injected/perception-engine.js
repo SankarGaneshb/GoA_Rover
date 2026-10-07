@@ -40,6 +40,8 @@
       this.initFontReadiness();
       this.initDOMMutationObserver();
       this.initEventTimingObserver();
+      this.initScriptErrorTrapper();
+      this.initCSSDefectScanner();
     }
 
     handleError(component, err) {
@@ -336,10 +338,162 @@
       }
     }
 
+    /** 7. Global Script Error Trapper (window.onerror & unhandledrejection) */
+    initScriptErrorTrapper() {
+      if (typeof window === 'undefined') return;
+      try {
+        this._errorHandler = (event) => {
+          try {
+            const message = event.message || (event.error && event.error.message) || 'Unknown Script Error';
+            const filename = event.filename || '';
+            const lineno = event.lineno || 0;
+            const colno = event.colno || 0;
+            const stack = (event.error && event.error.stack) || '';
+
+            this.dispatch({
+              type: 'script_error',
+              timestamp: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+              severity: 'critical',
+              details: {
+                message,
+                filename,
+                lineno,
+                colno,
+                stack,
+                errorType: (event.error && event.error.name) || 'RuntimeError'
+              }
+            });
+          } catch (e) {
+            this.handleError('ErrorHandlerCallback', e);
+          }
+        };
+
+        this._rejectionHandler = (event) => {
+          try {
+            const reason = event.reason;
+            const message = (reason && reason.message) ? reason.message : String(reason);
+            const stack = (reason && reason.stack) ? reason.stack : '';
+
+            this.dispatch({
+              type: 'unhandled_rejection',
+              timestamp: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+              severity: 'critical',
+              details: {
+                message: `Unhandled Promise Rejection: ${message}`,
+                stack,
+                errorType: (reason && reason.name) || 'UnhandledPromiseRejection'
+              }
+            });
+          } catch (e) {
+            this.handleError('RejectionHandlerCallback', e);
+          }
+        };
+
+        window.addEventListener('error', this._errorHandler);
+        window.addEventListener('unhandledrejection', this._rejectionHandler);
+      } catch (err) {
+        this.handleError('ScriptErrorTrapperRegister', err);
+      }
+    }
+
+    /** 8. CSS Layout Defect Scanner (Flex collapse, Text overflow clipping) */
+    initCSSDefectScanner() {
+      if (typeof window === 'undefined' || typeof document === 'undefined') return;
+      try {
+        // Run scan on initial idle and expose manual scanner
+        if (typeof window.requestIdleCallback === 'function') {
+          window.requestIdleCallback(() => this.scanDOMForCSSDefects());
+        } else {
+          setTimeout(() => this.scanDOMForCSSDefects(), 500);
+        }
+      } catch (err) {
+        this.handleError('CSSDefectScannerInit', err);
+      }
+    }
+
+    scanDOMForCSSDefects(rootElement = null) {
+      if (typeof document === 'undefined') return [];
+      const root = rootElement || document.body;
+      if (!root) return [];
+
+      const defects = [];
+      try {
+        const elements = root.querySelectorAll('*');
+        for (let i = 0; i < elements.length; i++) {
+          const el = elements[i];
+          if (!el || el.id === 'goa-rover-root') continue;
+
+          try {
+            const style = (typeof window !== 'undefined' && window.getComputedStyle) ? window.getComputedStyle(el) : null;
+            if (!style || style.display === 'none' || style.visibility === 'hidden') continue;
+
+            // 1. Flex collapse detection
+            const parent = el.parentElement;
+            if (parent && typeof window !== 'undefined' && window.getComputedStyle) {
+              const parentStyle = window.getComputedStyle(parent);
+              if ((parentStyle.display === 'flex' || parentStyle.display === 'inline-flex') &&
+                  parentStyle.flexDirection !== 'column') {
+                const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: el.offsetWidth || 0 };
+                if (rect.width === 0 && (el.textContent || '').trim().length > 0) {
+                  const defect = {
+                    defectType: 'flex_collapse',
+                    targetSelector: el.tagName + (el.id ? '#' + el.id : el.className ? '.' + el.className.split(' ').join('.') : ''),
+                    message: `Flex child collapsed to 0px width (${el.tagName})`,
+                    element: el
+                  };
+                  defects.push(defect);
+                  this.dispatch({
+                    type: 'css_layout_defect',
+                    timestamp: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+                    severity: 'high',
+                    details: defect
+                  });
+                }
+              }
+            }
+
+            // 2. Text overflow cutoff without ellipsis or wrapping
+            if (style.overflow === 'hidden' || style.overflowX === 'hidden') {
+              if (el.scrollWidth > el.clientWidth && el.clientWidth > 0) {
+                if (style.textOverflow !== 'ellipsis') {
+                  const defect = {
+                    defectType: 'overflow_clipping',
+                    targetSelector: el.tagName + (el.id ? '#' + el.id : ''),
+                    message: `Text clipped by overflow:hidden without text-overflow:ellipsis (${el.scrollWidth}px content in ${el.clientWidth}px container)`,
+                    element: el
+                  };
+                  defects.push(defect);
+                  this.dispatch({
+                    type: 'css_layout_defect',
+                    timestamp: (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(),
+                    severity: 'medium',
+                    details: defect
+                  });
+                }
+              }
+            }
+          } catch (nodeErr) {
+            // Safe traversal guard
+          }
+        }
+      } catch (err) {
+        this.handleError('ScanDOMForCSSDefects', err);
+      }
+      return defects;
+    }
+
     destroy() {
       if (this.mutationTimer) {
         clearTimeout(this.mutationTimer);
         this.mutationTimer = null;
+      }
+      if (this._errorHandler && typeof window !== 'undefined') {
+        window.removeEventListener('error', this._errorHandler);
+        this._errorHandler = null;
+      }
+      if (this._rejectionHandler && typeof window !== 'undefined') {
+        window.removeEventListener('unhandledrejection', this._rejectionHandler);
+        this._rejectionHandler = null;
       }
       this.observers.forEach((obs) => {
         try { obs.disconnect(); } catch (e) {}

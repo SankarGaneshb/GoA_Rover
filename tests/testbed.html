@@ -69,7 +69,21 @@
   </div>
 
   <div class="panel">
-    <h2>3. Perception & Buffer Event Stream</h2>
+    <h2>3. Legacy CSS & Script Errors (New In-Situ Remediation)</h2>
+    <button id="btn-trigger-script-error" class="danger">💥 Trigger Uncaught TypeError (undefined.map)</button>
+    <button id="btn-trigger-flex-collapse" class="danger">💥 Trigger Flexbox Child Collapse (0px width)</button>
+    <div id="flex-test-container" style="display:none; border:2px dashed #94a3b8; padding:8px; margin-top:8px;">
+      <div id="flex-parent" style="display:flex; width:300px; background:#e2e8f0; padding:4px;">
+        <div id="flex-child-collapsed" style="flex-shrink:1; width:0; overflow:hidden; background:#ef4444; color:white; padding:4px;">
+          Legacy Button Collapsed
+        </div>
+        <div style="flex:1; background:#38bdf8; padding:4px;">Remaining Content</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>4. Perception & Buffer Event Stream</h2>
     <div class="log-box" id="event-stream">Waiting for events...</div>
   </div>
 
@@ -151,6 +165,25 @@
           body: { id: 999, title: "Fixed in-situ by GoA_Rover Tamper Sandbox", completed: true }
         });
         logEvent('Tamper rule installed for "broken-endpoint". Try clicking "Fetch Broken API" now!');
+      }
+    });
+
+    // 7. Trigger Uncaught Script TypeError
+    document.getElementById('btn-trigger-script-error').addEventListener('click', () => {
+      logEvent('Triggering legacy uncaught TypeError...');
+      setTimeout(() => {
+        let legacyData;
+        legacyData.items.map(item => item.id); // Triggers real TypeError
+      }, 50);
+    });
+
+    // 8. Trigger Flexbox Child Collapse
+    document.getElementById('btn-trigger-flex-collapse').addEventListener('click', () => {
+      const container = document.getElementById('flex-test-container');
+      container.style.display = 'block';
+      logEvent('Mounted collapsed flex child (0px width). Scanning DOM...');
+      if (window.__GOA_ROVER_PERCEPTION__) {
+        window.__GOA_ROVER_PERCEPTION__.scanDOMForCSSDefects(container);
       }
     });
   </script>
