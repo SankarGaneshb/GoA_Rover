@@ -45,12 +45,24 @@
     });
   }
 
-  // 3. Mount Isolated Shadow DOM Container
-  const host = document.createElement('div');
-  host.id = 'goa-rover-root';
-  (document.body || document.documentElement).appendChild(host);
+  // 3. Mount Isolated Shadow DOM Container safely when DOM is ready
+  function mountHUD() {
+    if (document.getElementById('goa-rover-root')) return;
+    const host = document.createElement('div');
+    host.id = 'goa-rover-root';
+    (document.body || document.documentElement).appendChild(host);
 
-  const shadow = host.attachShadow({ mode: 'open' });
+    const shadow = host.attachShadow({ mode: 'open' });
+    initShadowUI(shadow);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountHUD);
+  } else {
+    mountHUD();
+  }
+
+  function initShadowUI(shadow) {
 
   // 4. Styles & Template
   shadow.innerHTML = `
@@ -319,22 +331,36 @@
       }
 
       renderEventList();
+
+      // Increment RoI minutes saved & award XP on anomaly caught
+      const netMin = p.severity === 'critical' ? 42 : 25;
+      store.minutesSaved += netMin;
+      store.totalXP += 50;
+      updateBadgeUI();
+
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({
+          minutesSaved: store.minutesSaved,
+          totalXP: store.totalXP
+        });
+      }
     } else if (event.data.source === 'GOA_ROVER_NETWORK') {
       store.networkLogs.unshift(event.data.payload);
       if (store.networkLogs.length > 20) store.networkLogs.pop();
     }
   });
 
-  function renderEventList() {
-    if (store.events.length === 0) {
-      eventList.textContent = 'No anomalies detected yet.';
-      return;
-    }
+    function renderEventList() {
+      if (store.events.length === 0) {
+        eventList.textContent = 'No anomalies detected yet.';
+        return;
+      }
 
-    eventList.innerHTML = store.events.slice(0, 5).map(e => `
-      <div class="event-item ${e.severity}">
-        <strong>${e.type.toUpperCase()}</strong>: ${e.details.message || ''}
-      </div>
-    `).join('');
+      eventList.innerHTML = store.events.slice(0, 5).map(e => `
+        <div class="event-item ${e.severity}">
+          <strong>${e.type.toUpperCase()}</strong>: ${e.details.message || ''}
+        </div>
+      `).join('');
+    }
   }
 })();
