@@ -56,27 +56,35 @@ Look at the **bottom-right corner** of the page—you will see the floating **Go
 ### The Floating In-Situ Badge (Bottom-Right)
 
 ```text
-┌──────────────────────────────────────────────┐
-│  🟢  |  ⚡ 0m saved  |  Lvl 1 Scout          │
-└──────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  🟢  |  ⚡ 0m this tab  |  Lvl 1 Scout                 │
+└────────────────────────────────────────────────────────┘
 ```
 
 | Element | Meaning |
 | :--- | :--- |
 | **Status Dot (🟢 / 🟡 / 🔴)** | **🟢 Green**: Clean page, all 6 perception observers active.<br/>**🟡 Yellow**: High latency, layout shift, or CSS defect detected.<br/>**🔴 Red**: Critical runtime crash, unhandled rejection, or blank shell. |
-| **RoI Ticker (`⚡ 0m saved`)** | Quantified net engineering minutes saved today. Automatically ticks up whenever a bug is caught or fixed. |
+| **This Tab RoI (`⚡ 0m this tab`)** | Quantified net engineering minutes saved **on this active page/tab session**. Automatically ticks up (`+23m`, `+59m`, `+101m`) whenever an anomaly is caught or fixed in this tab. |
 | **Hunter Rank (`Lvl 1 Scout`)** | Your gamified developer level. Levels up as you catch bugs and apply fixes! |
+| **Hover Tooltip** | Hover your mouse over the pill at any time to see the full dual breakdown:<br/>• **⚡ This Tab**: +Xm saved (Y bugs)<br/>• **🏆 Lifetime**: Total cumulative minutes & hours saved across all tabs & days<br/>• **🎖️ Rank & XP**: Current hunter title and progression points. |
 
 ---
 
 ### The GoA_Rover Triage Card (Expanded Modal)
 
-Clicking on the floating badge opens the **Bug Card**:
+Clicking on the floating badge opens the **Bug Card / Triage Modal**:
 
 ```text
 ┌────────────────────────────────────────────────────────┐
 │ 🛡️ GoA_Rover Triage Card                             ✕ │
 ├────────────────────────────────────────────────────────┤
+│ ┌──────────────────────────┬─────────────────────────┐ │
+│ │ THIS TAB SESSION         │ LIFETIME ROI            │ │
+│ │ ⚡ 0m saved              │ 🏆 8,478m saved         │ │
+│ │ 0 bugs caught            │ Cumulative across tabs  │ │
+│ └──────────────────────────┴─────────────────────────┘ │
+│ [ 🔄 Reset This Tab to 0m ]                            │
+│                                                        │
 │ COMPONENT BREADCRUMBS (DECOMPILED)                     │
 │ [ BODY (Vanilla)                                     ] │
 │                                                        │
@@ -267,4 +275,6 @@ You spent hours fixing bugs, but engineering managers don't see the quantified v
 | **🔴 Red Dot** | JavaScript TypeError or blank shell | Open card to view stack trace and suggested guard |
 | **Collapsed 0px Element** | Flex child squished by flex-shrink | Open card $\rightarrow$ Click **"🛠️ Auto-Fix in Live DOM"** |
 | **Broken API Endpoint** | Backend returns unexpected payload | Open card $\rightarrow$ Paste mock JSON $\rightarrow$ Click **"Re-inject & Replay Payload"** |
+| **Reset Demo Tab to 0** | Testing or demonstrating to teammates | Open card $\rightarrow$ Click **"🔄 Reset This Tab to 0m"** (wipes tab count to 0 without losing Lifetime Rank) |
+| **Check Overall Score** | See cumulative hours across all tabs | Open card $\rightarrow$ Check **"LIFETIME ROI"** in the top scorecard banner |
 | **Need to report value** | Standup or sprint review | Click extension icon $\rightarrow$ Click **"Export Standup Report"** |
