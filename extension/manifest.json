@@ -16,14 +16,18 @@
   "host_permissions": [
     "http://localhost/*",
     "http://127.0.0.1/*",
-    "https://*/*"
+    "http://[::1]/*"
   ],
   "background": {
     "service_worker": "background/service-worker.js"
   },
   "content_scripts": [
     {
-      "matches": ["http://localhost/*", "http://127.0.0.1/*", "<all_urls>"],
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "http://[::1]/*"
+      ],
       "js": ["content/content-script.js"],
       "run_at": "document_start"
     }
@@ -37,7 +41,11 @@
         "injected/framework-decompiler.js",
         "lib/auto-fixer.js"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "http://[::1]/*"
+      ]
     }
   ],
   "action": {
