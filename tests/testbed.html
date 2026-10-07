@@ -65,11 +65,11 @@
     <h2>2. Network Proxy & Tamper Sandbox (M2)</h2>
     <button id="btn-fetch-ok">Fetch Normal API</button>
     <button id="btn-fetch-broken" class="danger">Fetch Broken API (null items)</button>
-    <button id="btn-tamper-rule">Register Tamper Mock (Force Fix in-situ)</button>
+    <button id="btn-tamper-rule">Register Tamper Mock (Force Fix On-the-Spot)</button>
   </div>
 
   <div class="panel">
-    <h2>3. Legacy CSS & Script Errors (New In-Situ Remediation)</h2>
+    <h2>3. Legacy CSS & Script Errors (On-the-Spot Live Remediation)</h2>
     <button id="btn-trigger-script-error" class="danger">💥 Trigger Uncaught TypeError (undefined.map)</button>
     <button id="btn-trigger-flex-collapse" class="danger">💥 Trigger Flexbox Child Collapse (0px width)</button>
     <button id="btn-trigger-multiple" class="danger" style="background:#b91c1c;">💥💥 Trigger Multiple Issues at Once (Batch Demo)</button>
@@ -169,7 +169,7 @@
       if (window.__GOA_ROVER_INTERCEPTOR__) {
         window.__GOA_ROVER_INTERCEPTOR__.setTamperRule('broken-endpoint', {
           status: 200,
-          body: { id: 999, title: "Fixed in-situ by GoA_Rover Tamper Sandbox", completed: true }
+          body: { id: 999, title: "Fixed On-the-Spot by GoA_Rover Tamper Sandbox", completed: true }
         });
         logEvent('Tamper rule installed for "broken-endpoint". Try clicking "Fetch Broken API" now!');
       }

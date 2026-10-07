@@ -11,9 +11,9 @@
 3. [Tutorial 1: Catching Main-Thread Freezes (LoAF Jank)](#tutorial-1-catching-main-thread-freezes-loaf-jank)
 4. [Tutorial 2: Detecting & Attributing Layout Shifts (CLS)](#tutorial-2-detecting--attributing-layout-shifts-cls)
 5. [Tutorial 3: Catching Silent JavaScript Crashes (TypeError)](#tutorial-3-catching-silent-javascript-crashes-typeerror)
-6. [Tutorial 4: In-Situ Auto-Fixing Collapsed CSS (Live Hot-Patch)](#tutorial-4-in-situ-auto-fixing-collapsed-css-live-hot-patch)
+6. [Tutorial 4: On-the-Spot Auto-Fixing Collapsed CSS (Live Hot-Patch)](#tutorial-4-on-the-spot-auto-fixing-collapsed-css-live-hot-patch)
 7. [Tutorial 5: Network Tamper & Mocking (Zero-Postman)](#tutorial-5-network-tamper--mocking-zero-postman)
-8. [Tutorial 6: In-Situ 30s Time-Travel Scrubber](#tutorial-6-in-situ-30s-time-travel-scrubber)
+8. [Tutorial 6: On-the-Spot 30s Time-Travel Scrubber](#tutorial-6-on-the-spot-30s-time-travel-scrubber)
 9. [Tutorial 7: Exporting Your Quantified RoI Standup Report](#tutorial-7-exporting-your-quantified-roi-standup-report)
 10. [Quick Reference Cheatsheet](#quick-reference-cheatsheet)
 
@@ -53,7 +53,7 @@ Look at the **bottom-right corner** of the page—you will see the floating **Go
 
 ## 2. Anatomy of the Interface
 
-### The Floating In-Situ Badge (Bottom-Right)
+### The Floating On-the-Spot Badge (Bottom-Right)
 
 ```text
 ┌────────────────────────────────────────────────────────┐
@@ -88,7 +88,7 @@ Clicking on the floating badge opens the **Bug Card / Triage Modal**:
 │ COMPONENT BREADCRUMBS (DECOMPILED)                     │
 │ [ BODY (Vanilla)                                     ] │
 │                                                        │
-│ IN-SITU 30S TIME-TRAVEL SCRUBBER                       │
+│ ON-THE-SPOT 30S TIME-TRAVEL SCRUBBER                   │
 │ -30s [═══════════════════════════════════════════●] Now│
 │                                                        │
 │ NETWORK TAMPER SANDBOX (ZERO-POSTMAN)                  │
@@ -97,7 +97,7 @@ Clicking on the floating badge opens the **Bug Card / Triage Modal**:
 │ └────────────────────────────────────────────────────┘ │
 │ [ Re-inject & Replay Payload ]                         │
 │                                                        │
-│ IN-SITU AUTO-REMEDIATION (CSS & SCRIPT FIXES)          │
+│ ON-THE-SPOT AUTO-REMEDIATION (CSS & SCRIPT FIXES)      │
 │ ┌────────────────────────────────────────────────────┐ │
 │ │ Diagnosis and proposed inline fix appears here...  │ │
 │ └────────────────────────────────────────────────────┘ │
@@ -162,7 +162,7 @@ An API returns `data: null` instead of an array. In legacy code: `data.items.map
 3. **What happens**:
    * The floating badge instantly turns **🔴 Red (Error)**.
    * Your RoI ticker increments by **+42m saved** (catching a critical crash).
-   * Open the Triage Card $\rightarrow$ look at **IN-SITU AUTO-REMEDIATION**:
+   * Open the Triage Card $\rightarrow$ look at **ON-THE-SPOT AUTO-REMEDIATION**:
      ```text
      Script Error Trapped:
      Cannot read properties of undefined (reading 'map')
@@ -172,7 +172,7 @@ An API returns `data: null` instead of an array. In legacy code: `data.items.map
 
 ---
 
-## 6. Tutorial 4: In-Situ Auto-Remediation & 1-Shot Multi-Issue Fix
+## 6. Tutorial 4: On-the-Spot Auto-Remediation & 1-Shot Multi-Issue Fix
 
 ### The Problem
 A legacy page has **multiple bugs at once**—for example, two collapsed navigation buttons with `flex-shrink: 1` squishing down to 0px, and an uncaught script `TypeError` in legacy event handlers. Fixing them one-by-one by hand takes considerable time.
@@ -185,7 +185,7 @@ A legacy page has **multiple bugs at once**—for example, two collapsed navigat
    * A script `TypeError` fires in the background.
    * The GoA_Rover badge turns **🔴 Red (Error)**.
 3. Open the **GoA_Rover Triage Card**:
-   * Look at **IN-SITU AUTO-REMEDIATION**:
+   * Look at **ON-THE-SPOT AUTO-REMEDIATION**:
      ```text
      ⚠️ 3 Issue(s) Detected on Page:
      #1 CSS Collapse: #flex-child-collapsed → flex-shrink: 0; min-width: fit-content;
@@ -201,7 +201,7 @@ A legacy page has **multiple bugs at once**—for example, two collapsed navigat
 
 ### Human-in-the-Loop (HIL) Decision & Approval Gate
 
-GoA_Rover **never** modifies the live DOM or writes files to disk automatically without explicit human consent. Every remediation action prompts an in-situ **HIL Verification Card**:
+GoA_Rover **never** modifies the live DOM or writes files to disk automatically without explicit human consent. Every remediation action prompts an on-the-spot **HIL Verification Card**:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -249,7 +249,7 @@ Your frontend is broken because a backend endpoint is returning bad data or a 40
      "status": 200,
      "body": {
        "id": 999,
-       "title": "🎉 Fixed in-situ by GoA_Rover Tamper Sandbox!",
+       "title": "🎉 Fixed On-the-Spot by GoA_Rover Tamper Sandbox!",
        "completed": true
      }
    }
@@ -261,7 +261,7 @@ Your frontend is broken because a backend endpoint is returning bad data or a 40
 
 ---
 
-## 8. Tutorial 6: In-Situ 30s Time-Travel Scrubber
+## 8. Tutorial 6: On-the-Spot 30s Time-Travel Scrubber
 
 ### The Problem
 A user clicked through 3 forms, triggered a crash, and the form reset. You lost all the state and have to re-type everything to reproduce it.

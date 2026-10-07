@@ -3,7 +3,7 @@
  * Features:
  * - Floating status badge with RoI ticker
  * - Expandable Bug Card modal with micro-timeline scrubber
- * - In-situ Network Tamper & Replay Sandbox
+ * - On-the-Spot Network Tamper & Replay Sandbox
  * - Framework Component Breadcrumbs view
  */
 
@@ -270,7 +270,7 @@
         <div class="section-title">Component Breadcrumbs (Decompiled)</div>
         <div class="breadcrumbs-box" id="comp-breadcrumbs">Root > Scanning DOM...</div>
 
-        <div class="section-title">In-Situ 30s Time-Travel Scrubber</div>
+        <div class="section-title">On-the-Spot 30s Time-Travel Scrubber</div>
         <div class="timeline-container">
           <span class="timeline-label">-30s</span>
           <input type="range" min="0" max="30" value="30" class="timeline-slider" id="scrubber-slider" />
@@ -281,7 +281,7 @@
         <textarea class="tamper-area" id="tamper-json" placeholder='{"status": 200, "data": []}'></textarea>
         <button class="btn-action" id="btn-apply-tamper">Re-inject & Replay Payload</button>
 
-        <div class="section-title">In-Situ Auto-Remediation (Human-in-the-Loop Approval Required)</div>
+        <div class="section-title">On-the-Spot Auto-Remediation (Human-in-the-Loop Approval Required)</div>
         <div id="remediation-box" style="background:#1e293b; padding:8px; border-radius:6px; font-family:monospace; font-size:11px; margin-bottom:6px; color:#fde047; max-height:160px; overflow-y:auto;">
           No active repair needed.
         </div>
