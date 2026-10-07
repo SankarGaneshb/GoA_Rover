@@ -37,11 +37,23 @@
   };
 
   // Sync stored statistics
+  function calculateRank(xp) {
+    if (xp >= 3000) return 'Lvl 5 Guardian';
+    if (xp >= 1500) return 'Lvl 4 Slayer';
+    if (xp >= 750) return 'Lvl 3 Whisperer';
+    if (xp >= 300) return 'Lvl 2 Detective';
+    return 'Lvl 1 Scout';
+  }
+
+  let updateBadgeUI = function () {};
+
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
     chrome.storage.local.get(['minutesSaved', 'totalXP', 'level'], (data) => {
-      if (data.minutesSaved) store.minutesSaved = data.minutesSaved;
-      if (data.totalXP) store.totalXP = data.totalXP;
-      if (data.level) store.level = data.level;
+      if (typeof data.minutesSaved === 'number') store.minutesSaved = data.minutesSaved;
+      if (typeof data.totalXP === 'number') {
+        store.totalXP = data.totalXP;
+        store.level = calculateRank(store.totalXP);
+      }
       updateBadgeUI();
     });
   }
@@ -272,10 +284,11 @@
   const btnLiveFix = shadow.getElementById('btn-live-fix');
   const eventList = shadow.getElementById('event-list');
 
-  function updateBadgeUI() {
-    roiCounter.textContent = `⚡ ${store.minutesSaved}m saved`;
-    levelPill.textContent = store.level;
-  }
+  updateBadgeUI = function () {
+    if (roiCounter) roiCounter.textContent = `⚡ ${store.minutesSaved}m saved`;
+    if (levelPill) levelPill.textContent = store.level;
+  };
+  updateBadgeUI();
 
   // Toggle Modal
   badge.addEventListener('click', () => {
@@ -328,6 +341,20 @@
   window.addEventListener('message', (event) => {
     if (!event.data) return;
 
+    function awardRoI(minutes, xp) {
+      store.minutesSaved += minutes;
+      store.totalXP += xp;
+      store.level = calculateRank(store.totalXP);
+      updateBadgeUI();
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({
+          minutesSaved: store.minutesSaved,
+          totalXP: store.totalXP,
+          level: store.level
+        });
+      }
+    }
+
     if (event.data.source === 'GOA_ROVER_PERCEPTION') {
       const p = event.data.payload;
       store.events.unshift(p);
@@ -340,6 +367,19 @@
       }
 
       renderEventList();
+
+      // Award RoI on perception events according to Layer 4 benchmarks
+      if (p.type === 'paint_anomaly') {
+        awardRoI(42, 75); // SILENT_CRASH benchmark (45m - 3m = 42m)
+      } else if (p.type === 'layout_shift') {
+        awardRoI(23, 30); // LAYOUT_SHIFT benchmark (25m - 2m = 23m)
+      } else if (p.type === 'loaf_jank') {
+        awardRoI(36, 50); // LOAF_FREEZE benchmark (40m - 4m = 36m)
+      } else if (p.type === 'dom_churn') {
+        awardRoI(20, 35); // Runaway loop benchmark
+      } else if (p.type === 'font_stall') {
+        awardRoI(18, 25); // FONT_STALL benchmark (20m - 2m = 18m)
+      }
 
       // Check if event is remediable (CSS defect or Script error)
       if (p.type === 'css_layout_defect') {
@@ -355,15 +395,7 @@
             btnLiveFix.style.display = 'none';
 
             // Award RoI on explicit user fix action
-            store.minutesSaved += 25;
-            store.totalXP += 50;
-            updateBadgeUI();
-            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-              chrome.storage.local.set({
-                minutesSaved: store.minutesSaved,
-                totalXP: store.totalXP
-              });
-            }
+            awardRoI(25, 50);
           }
         };
       } else if (p.type === 'script_error' || p.type === 'unhandled_rejection') {
@@ -371,19 +403,17 @@
         btnLiveFix.style.display = 'none';
 
         // Award RoI on critical script crash detection
-        store.minutesSaved += 42;
-        store.totalXP += 75;
-        updateBadgeUI();
-        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-          chrome.storage.local.set({
-            minutesSaved: store.minutesSaved,
-            totalXP: store.totalXP
-          });
-        }
+        awardRoI(42, 75);
       }
     } else if (event.data.source === 'GOA_ROVER_NETWORK') {
-      store.networkLogs.unshift(event.data.payload);
+      const net = event.data.payload;
+      store.networkLogs.unshift(net);
       if (store.networkLogs.length > 20) store.networkLogs.pop();
+
+      // Award RoI if payload anomaly / tamper mock applied
+      if (net && net.tampered) {
+        awardRoI(28, 60); // PAYLOAD_ANOMALY benchmark (30m - 2m = 28m)
+      }
     }
   });
 
