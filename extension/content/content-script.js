@@ -281,13 +281,30 @@
         <textarea class="tamper-area" id="tamper-json" placeholder='{"status": 200, "data": []}'></textarea>
         <button class="btn-action" id="btn-apply-tamper">Re-inject & Replay Payload</button>
 
-        <div class="section-title">In-Situ Auto-Remediation (CSS & Script Fixes)</div>
+        <div class="section-title">In-Situ Auto-Remediation (Human-in-the-Loop Approval Required)</div>
         <div id="remediation-box" style="background:#1e293b; padding:8px; border-radius:6px; font-family:monospace; font-size:11px; margin-bottom:6px; color:#fde047; max-height:160px; overflow-y:auto;">
           No active repair needed.
         </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">
-          <button class="btn-action" id="btn-fix-all-live" style="background:#16a34a; display:none;">✨ Auto-Fix All in Live DOM (1-Shot)</button>
-          <button class="btn-action" id="btn-patch-all-disk" style="background:#8b5cf6; display:none;">💾 1-Click Patch All to Disk</button>
+
+        <!-- HIL Confirmation & Review Box (Explicit Human Approval) -->
+        <div id="hil-approval-card" style="display:none; background:#0f172a; border:1px solid #eab308; border-radius:6px; padding:10px; margin-top:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <strong style="color:#fde047; font-size:12px;">🛡️ HIL Verification & Decision</strong>
+            <span id="hil-mode-tag" style="background:#eab308; color:#0f172a; font-weight:700; font-size:9px; padding:2px 6px; border-radius:4px; text-transform:uppercase;">Approval Needed</span>
+          </div>
+          <div id="hil-summary-text" style="font-size:11px; color:#cbd5e1; margin-bottom:8px; font-family:monospace; line-height:1.4;">
+            Review planned mutations before executing.
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-action" id="btn-hil-approve" style="background:#16a34a; font-size:11px; padding:5px 10px; margin-top:0;">✅ Approve & Apply</button>
+            <button class="btn-action" id="btn-hil-reject" style="background:#475569; font-size:11px; padding:5px 10px; margin-top:0;">❌ Reject / Cancel</button>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+          <button class="btn-action" id="btn-fix-both" style="background:#0284c7; display:none;">⚡ Apply Both (Live DOM + Disk Patch)</button>
+          <button class="btn-action" id="btn-fix-all-live" style="background:#16a34a; display:none;">✨ Live DOM Only</button>
+          <button class="btn-action" id="btn-patch-all-disk" style="background:#8b5cf6; display:none;">💾 Disk Patch Only</button>
           <button class="btn-action" id="btn-copy-diff" style="background:#475569; display:none;">📋 Copy Unified Diff</button>
         </div>
         <div id="workspace-status" style="font-size:10px; color:#94a3b8; margin-top:6px; font-family:monospace;">
@@ -321,6 +338,12 @@
   const btnTamper = shadow.getElementById('btn-apply-tamper');
   const remediationBox = shadow.getElementById('remediation-box');
   const eventList = shadow.getElementById('event-list');
+  const hilApprovalCard = shadow.getElementById('hil-approval-card');
+  const hilModeTag = shadow.getElementById('hil-mode-tag');
+  const hilSummaryText = shadow.getElementById('hil-summary-text');
+  const btnHilApprove = shadow.getElementById('btn-hil-approve');
+  const btnHilReject = shadow.getElementById('btn-hil-reject');
+  const btnFixBoth = shadow.getElementById('btn-fix-both');
   const btnFixAllLive = shadow.getElementById('btn-fix-all-live');
   const btnPatchAllDisk = shadow.getElementById('btn-patch-all-disk');
   const btnCopyDiff = shadow.getElementById('btn-copy-diff');
@@ -333,13 +356,16 @@
   const linkConnectWs = shadow.getElementById('link-connect-ws');
 
   let workspaceDirHandle = null;
+  let pendingHilAction = null; // Holds callback to execute once developer explicitly approves
 
   function renderFixQueue() {
     if (store.pendingFixes.length === 0) {
       remediationBox.innerHTML = 'No active repair needed.';
-      btnFixAllLive.style.display = 'none';
-      btnPatchAllDisk.style.display = 'none';
-      btnCopyDiff.style.display = 'none';
+      if (hilApprovalCard) hilApprovalCard.style.display = 'none';
+      if (btnFixBoth) btnFixBoth.style.display = 'none';
+      if (btnFixAllLive) btnFixAllLive.style.display = 'none';
+      if (btnPatchAllDisk) btnPatchAllDisk.style.display = 'none';
+      if (btnCopyDiff) btnCopyDiff.style.display = 'none';
       return;
     }
 
@@ -348,22 +374,39 @@
 
     let html = `<strong>⚠️ ${store.pendingFixes.length} Issue(s) Detected on Page:</strong><br/>`;
     store.pendingFixes.forEach((fix, idx) => {
+      const isChecked = fix.selected !== false ? 'checked' : '';
       if (fix.type === 'css') {
-        html += `<div style="margin-top:4px; padding:3px 6px; background:#0f172a; border-radius:4px; border-left:3px solid #38bdf8;">` +
-                `<strong>#${idx + 1} CSS Collapse:</strong> ${fix.selector} &rarr; <code>flex-shrink: 0; min-width: fit-content;</code></div>`;
+        html += `<div style="display:flex; align-items:flex-start; gap:6px; margin-top:4px; padding:4px 6px; background:#0f172a; border-radius:4px; border-left:3px solid #38bdf8;">` +
+                `<input type="checkbox" class="fix-check" data-idx="${idx}" ${isChecked} style="margin-top:2px;" />` +
+                `<div><strong>#${idx + 1} CSS Collapse:</strong> ${fix.selector}<br/><code style="color:#67e8f9;">flex-shrink: 0; min-width: fit-content;</code></div></div>`;
       } else {
-        html += `<div style="margin-top:4px; padding:3px 6px; background:#0f172a; border-radius:4px; border-left:3px solid #ef4444;">` +
-                `<strong>#${idx + 1} Script Crash:</strong> ${fix.filename || 'script'}:${fix.lineno || 1} &rarr; <code>${fix.message || 'TypeError'}</code></div>`;
+        html += `<div style="display:flex; align-items:flex-start; gap:6px; margin-top:4px; padding:4px 6px; background:#0f172a; border-radius:4px; border-left:3px solid #ef4444;">` +
+                `<input type="checkbox" class="fix-check" data-idx="${idx}" ${isChecked} style="margin-top:2px;" />` +
+                `<div><strong>#${idx + 1} Script Crash:</strong> ${fix.filename || 'script'}:${fix.lineno || 1}<br/><code style="color:#f87171;">${fix.message || 'TypeError'}</code></div></div>`;
       }
     });
 
     remediationBox.innerHTML = html;
+
+    // Attach checkbox toggle listeners
+    remediationBox.querySelectorAll('.fix-check').forEach(cb => {
+      cb.addEventListener('change', (e) => {
+        const idx = parseInt(e.target.getAttribute('data-idx'), 10);
+        if (store.pendingFixes[idx]) {
+          store.pendingFixes[idx].selected = e.target.checked;
+        }
+      });
+    });
+
+    const activeSelected = store.pendingFixes.filter(f => f.selected !== false);
+    btnFixBoth.style.display = 'inline-block';
+    btnFixBoth.textContent = `⚡ Apply Both (Live DOM + Disk Patch)`;
     btnFixAllLive.style.display = cssCount > 0 ? 'inline-block' : 'none';
-    btnFixAllLive.textContent = `✨ Auto-Fix ${cssCount} CSS Issue(s) in Live DOM (1-Shot)`;
+    btnFixAllLive.textContent = `✨ Live DOM Only (${cssCount} CSS)`;
     btnPatchAllDisk.style.display = 'inline-block';
-    btnPatchAllDisk.textContent = `💾 1-Click Patch All (${store.pendingFixes.length}) to Disk`;
+    btnPatchAllDisk.textContent = `💾 Disk Patch Only (${store.pendingFixes.length})`;
     btnCopyDiff.style.display = 'inline-block';
-    btnCopyDiff.textContent = `📋 Copy Unified Diff (${store.pendingFixes.length})`;
+    btnCopyDiff.textContent = `📋 Copy Diff (${store.pendingFixes.length})`;
   }
 
   if (linkConnectWs) {
@@ -543,63 +586,159 @@
         awardRoI(42, 75);
       }
 
-      // Wire 1-Shot Multi-Fix live DOM button
-      btnFixAllLive.onclick = () => {
-        const cssFixes = store.pendingFixes.filter(f => f.type === 'css');
-        let appliedCount = 0;
-        cssFixes.forEach(fix => {
-          const targetEl = document.querySelector(fix.selector);
-          if (targetEl) {
-            targetEl.style.flexShrink = '0';
-            targetEl.style.minWidth = 'fit-content';
-            appliedCount++;
-          }
-        });
+      // Function to prompt Human-in-the-Loop decision
+      function promptHilDecision(mode, description, actionCallback) {
+        pendingHilAction = actionCallback;
+        hilModeTag.textContent = mode;
+        hilSummaryText.innerHTML = description;
+        hilApprovalCard.style.display = 'block';
+      }
 
-        // Remove applied CSS fixes from queue
-        store.pendingFixes = store.pendingFixes.filter(f => f.type !== 'css');
-        renderFixQueue();
-
-        if (appliedCount > 0) {
-          remediationBox.innerHTML += `<div style="color:#4ade80; margin-top:6px;">✅ 1-Shot Live DOM Fix applied to ${appliedCount} element(s)!</div>`;
-          awardRoI(25 * appliedCount, 50 * appliedCount);
+      // HIL Approve button
+      btnHilApprove.onclick = async () => {
+        if (typeof pendingHilAction === 'function') {
+          const action = pendingHilAction;
+          pendingHilAction = null;
+          hilApprovalCard.style.display = 'none';
+          await action();
         }
       };
 
-      // Wire Unified Diff Copy button
-      btnCopyDiff.onclick = () => {
-        if (store.pendingFixes.length === 0) return;
-        const unifiedDiff = store.pendingFixes.map(f => f.diff).join('\n');
-        navigator.clipboard.writeText(unifiedDiff).then(() => {
-          alert(`Unified diff (${store.pendingFixes.length} fixes) copied to clipboard!\n\n` + unifiedDiff);
-        });
+      // HIL Reject button
+      btnHilReject.onclick = () => {
+        pendingHilAction = null;
+        hilApprovalCard.style.display = 'none';
+        remediationBox.innerHTML += `<div style="color:#94a3b8; margin-top:4px;">❌ Remediation cancelled by developer. No changes were made.</div>`;
       };
 
-      // Wire 1-Click Multi-Issue Disk Patch
-      btnPatchAllDisk.onclick = async () => {
+      // Wire Option 1: Live DOM Only with HIL Gate
+      btnFixAllLive.onclick = () => {
+        const selectedCss = store.pendingFixes.filter(f => f.type === 'css' && f.selected !== false);
+        if (selectedCss.length === 0) {
+          alert('No CSS fixes selected. Please check at least one CSS issue above.');
+          return;
+        }
+
+        promptHilDecision(
+          'Live DOM Hot-Patch',
+          `⚠️ <strong>Confirm Live DOM Modification:</strong><br/>` +
+          `You are about to modify ${selectedCss.length} element(s) directly in the active DOM session.<br/>` +
+          `Selectors: <code style="color:#38bdf8;">${selectedCss.map(f => f.selector).join(', ')}</code>`,
+          () => {
+            let appliedCount = 0;
+            selectedCss.forEach(fix => {
+              const targetEl = document.querySelector(fix.selector);
+              if (targetEl) {
+                targetEl.style.flexShrink = '0';
+                targetEl.style.minWidth = 'fit-content';
+                appliedCount++;
+              }
+            });
+
+            // Remove applied CSS fixes from queue
+            store.pendingFixes = store.pendingFixes.filter(f => !selectedCss.includes(f));
+            renderFixQueue();
+
+            if (appliedCount > 0) {
+              remediationBox.innerHTML += `<div style="color:#4ade80; margin-top:6px;">✅ Approved & Applied Live DOM Fix to ${appliedCount} element(s)!</div>`;
+              awardRoI(25 * appliedCount, 50 * appliedCount);
+            }
+          }
+        );
+      };
+
+      // Wire Option 2: Disk Patch Only with HIL Gate
+      btnPatchAllDisk.onclick = () => {
         if (!workspaceDirHandle) {
           alert('Please connect your project folder first using "[Connect Project Folder]" above!');
           return;
         }
-        if (store.pendingFixes.length === 0) return;
-
-        try {
-          const patchCount = store.pendingFixes.length;
-          const unifiedDiff = store.pendingFixes.map(f => f.diff).join('\n');
-          const patchFileHandle = await workspaceDirHandle.getFileHandle('goa-rover-fix.patch', { create: true });
-          const writable = await patchFileHandle.createWritable();
-          await writable.write(unifiedDiff);
-          await writable.close();
-
-          remediationBox.innerHTML = `<span style="color:#a78bfa;">💾 Successfully written 'goa-rover-fix.patch' (${patchCount} fixes) to project root!</span>`;
-          store.pendingFixes = [];
-          btnPatchAllDisk.style.display = 'none';
-          btnFixAllLive.style.display = 'none';
-          btnCopyDiff.style.display = 'none';
-          awardRoI(30 * patchCount, 60 * patchCount);
-        } catch (err) {
-          alert('File write failed: ' + (err ? err.message : err));
+        const selectedFixes = store.pendingFixes.filter(f => f.selected !== false);
+        if (selectedFixes.length === 0) {
+          alert('No fixes selected. Please check at least one issue above.');
+          return;
         }
+
+        promptHilDecision(
+          'Disk File Write',
+          `⚠️ <strong>Confirm File Write to Disk:</strong><br/>` +
+          `GoA_Rover will write <code style="color:#a78bfa;">goa-rover-fix.patch</code> (${selectedFixes.length} fixes) to: <br/>` +
+          `📁 <strong>${workspaceDirHandle.name}/goa-rover-fix.patch</strong>`,
+          async () => {
+            try {
+              const patchCount = selectedFixes.length;
+              const unifiedDiff = selectedFixes.map(f => f.diff).join('\n');
+              const patchFileHandle = await workspaceDirHandle.getFileHandle('goa-rover-fix.patch', { create: true });
+              const writable = await patchFileHandle.createWritable();
+              await writable.write(unifiedDiff);
+              await writable.close();
+
+              remediationBox.innerHTML = `<span style="color:#a78bfa;">💾 Approved & Written 'goa-rover-fix.patch' (${patchCount} fixes) to project root!</span>`;
+              store.pendingFixes = store.pendingFixes.filter(f => !selectedFixes.includes(f));
+              renderFixQueue();
+              awardRoI(30 * patchCount, 60 * patchCount);
+            } catch (err) {
+              alert('File write failed: ' + (err ? err.message : err));
+            }
+          }
+        );
+      };
+
+      // Wire Option 3: Apply Both (Live DOM + Disk Patch) with HIL Gate
+      btnFixBoth.onclick = () => {
+        if (!workspaceDirHandle) {
+          alert('Please connect your project folder first using "[Connect Project Folder]" above to write the disk patch!');
+          return;
+        }
+        const selectedFixes = store.pendingFixes.filter(f => f.selected !== false);
+        const selectedCss = selectedFixes.filter(f => f.type === 'css');
+        if (selectedFixes.length === 0) {
+          alert('No fixes selected. Please check at least one issue above.');
+          return;
+        }
+
+        promptHilDecision(
+          'Dual Remediation (Live DOM + Disk)',
+          `⚠️ <strong>Confirm Dual Remediation:</strong><br/>` +
+          `1. Hot-patch <strong>${selectedCss.length} element(s)</strong> live in the current DOM session.<br/>` +
+          `2. Write unified patch (${selectedFixes.length} issues) to 📁 <strong>${workspaceDirHandle.name}/goa-rover-fix.patch</strong>.`,
+          async () => {
+            let appliedLiveCount = 0;
+            selectedCss.forEach(fix => {
+              const targetEl = document.querySelector(fix.selector);
+              if (targetEl) {
+                targetEl.style.flexShrink = '0';
+                targetEl.style.minWidth = 'fit-content';
+                appliedLiveCount++;
+              }
+            });
+
+            try {
+              const unifiedDiff = selectedFixes.map(f => f.diff).join('\n');
+              const patchFileHandle = await workspaceDirHandle.getFileHandle('goa-rover-fix.patch', { create: true });
+              const writable = await patchFileHandle.createWritable();
+              await writable.write(unifiedDiff);
+              await writable.close();
+
+              remediationBox.innerHTML = `<span style="color:#4ade80;">✅ Approved: Applied ${appliedLiveCount} live DOM fix(es) AND generated 'goa-rover-fix.patch' on disk!</span>`;
+              store.pendingFixes = store.pendingFixes.filter(f => !selectedFixes.includes(f));
+              renderFixQueue();
+              awardRoI((25 * appliedLiveCount) + (30 * selectedFixes.length), (50 * appliedLiveCount) + (60 * selectedFixes.length));
+            } catch (err) {
+              alert('File write failed: ' + (err ? err.message : err));
+            }
+          }
+        );
+      };
+
+      // Wire Unified Diff Copy button
+      btnCopyDiff.onclick = () => {
+        const selectedFixes = store.pendingFixes.filter(f => f.selected !== false);
+        if (selectedFixes.length === 0) return;
+        const unifiedDiff = selectedFixes.map(f => f.diff).join('\n');
+        navigator.clipboard.writeText(unifiedDiff).then(() => {
+          alert(`Unified diff (${selectedFixes.length} selected fixes) copied to clipboard!\n\n` + unifiedDiff);
+        });
       };
     } else if (event.data.source === 'GOA_ROVER_NETWORK') {
       const net = event.data.payload;

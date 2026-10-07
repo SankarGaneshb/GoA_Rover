@@ -192,27 +192,45 @@ A legacy page has **multiple bugs at once**—for example, two collapsed navigat
      #2 CSS Collapse: #flex-child-collapsed-2 → flex-shrink: 0; min-width: fit-content;
      #3 Script Crash: testbed.html:206 → TypeError: Cannot read properties of undefined
      ```
-   * Notice the three batch remediation buttons light up:
-     * **`[ ✨ Auto-Fix 2 CSS Issue(s) in Live DOM (1-Shot) ]`**
-     * **`[ 💾 1-Click Patch All (3) to Disk ]`**
-     * **`[ 📋 Copy Unified Diff (3) ]`**
+   * Each issue has an individual checkbox so you can pick which issues to include or exclude.
+   * Notice the four remediation actions light up:
+     * **`[ ⚡ Apply Both (Live DOM + Disk Patch) ]`**
+     * **`[ ✨ Live DOM Only (2 CSS) ]`**
+     * **`[ 💾 Disk Patch Only (3) ]`**
+     * **`[ 📋 Copy Diff (3) ]`**
 
-### Two Ways to Resolve All Issues in One Shot:
+### Human-in-the-Loop (HIL) Decision & Approval Gate
 
-#### Way 1: 1-Shot Live DOM Hot-Patch (Instant Visual Repair)
-* Click **`[ ✨ Auto-Fix 2 CSS Issue(s) in Live DOM (1-Shot) ]`**.
-* Both collapsed elements instantly expand to full width in real time without refreshing!
-* Cumulative RoI and XP are awarded in one go.
+GoA_Rover **never** modifies the live DOM or writes files to disk automatically without explicit human consent. Every remediation action prompts an in-situ **HIL Verification Card**:
 
-#### Way 2: 1-Click Patch All to Disk (Permanent Source Code Patch)
-1. Click **`[Connect Project Folder]`** in the card and select your local repo root directory using Chrome's native File System Access API.
-2. Click **`[ 💾 1-Click Patch All (3) to Disk ]`**.
-3. GoA_Rover compiles a unified patch covering all CSS fixes and script error defensive guards, then directly writes `goa-rover-fix.patch` into your repo root!
-4. Apply it in terminal whenever you want via:
-   ```bash
-   git apply goa-rover-fix.patch
-   ```
-5. Or click **`[ 📋 Copy Unified Diff (3) ]`** to copy the full combined patch straight to your clipboard.
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ 🛡️ HIL Verification & Decision            [APPROVAL NEEDED] │
+│ ⚠️ Confirm Dual Remediation:                                │
+│ 1. Hot-patch 2 element(s) live in current DOM session.      │
+│ 2. Write unified patch (3 issues) to:                       │
+│    📁 my-project/goa-rover-fix.patch                        │
+│                                                             │
+│ [ ✅ Approve & Apply ]        [ ❌ Reject / Cancel ]        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Remediation Options Available:
+
+#### Option 1: ⚡ Apply Both (Live DOM + Disk Patch)
+* Triggers the HIL review card summarizing both the live DOM elements to expand and the exact patch file to create on disk.
+* Upon clicking **`[ ✅ Approve & Apply ]`**:
+  1. The live DOM is immediately hot-patched on screen without page refresh.
+  2. The unified `goa-rover-fix.patch` is written directly to your project root.
+* If you click **`[ ❌ Reject / Cancel ]`**, no changes are made.
+
+#### Option 2: ✨ Live DOM Only (Instant Visual Repair)
+* Prompts HIL review displaying the exact CSS selectors to mutate.
+* Upon approval, applies `flex-shrink: 0; min-width: fit-content;` live to the page.
+
+#### Option 3: 💾 Disk Patch Only (Permanent Source Code Patch)
+* Prompts HIL review showing the file target path (`goa-rover-fix.patch`).
+* Upon approval, saves the patch into your connected workspace folder for later `git apply goa-rover-fix.patch`.
 
 ---
 
