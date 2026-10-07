@@ -29,7 +29,10 @@
   const store = {
     events: [],
     networkLogs: [],
-    minutesSaved: 0,
+    tabMinutesSaved: 0,
+    tabBugsCaught: 0,
+    lifetimeMinutesSaved: 0,
+    lifetimeBugsCaught: 0,
     totalXP: 0,
     level: 'Lvl 1 Scout',
     isCardOpen: false,
@@ -47,15 +50,26 @@
 
   let updateBadgeUI = function () {};
 
-  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-    chrome.storage.local.get(['minutesSaved', 'totalXP', 'level'], (data) => {
-      if (typeof data.minutesSaved === 'number') store.minutesSaved = data.minutesSaved;
-      if (typeof data.totalXP === 'number') {
-        store.totalXP = data.totalXP;
-        store.level = calculateRank(store.totalXP);
-      }
-      updateBadgeUI();
-    });
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && chrome.storage && chrome.storage.local) {
+    try {
+      chrome.storage.local.get(['lifetimeMinutesSaved', 'lifetimeBugsCaught', 'minutesSaved', 'totalXP', 'level'], (data) => {
+        if (chrome.runtime.lastError) return;
+        if (typeof data?.lifetimeMinutesSaved === 'number') {
+          store.lifetimeMinutesSaved = data.lifetimeMinutesSaved;
+        } else if (typeof data?.minutesSaved === 'number') {
+          // Backward compatibility
+          store.lifetimeMinutesSaved = data.minutesSaved;
+        }
+        if (typeof data?.lifetimeBugsCaught === 'number') store.lifetimeBugsCaught = data.lifetimeBugsCaught;
+        if (typeof data?.totalXP === 'number') {
+          store.totalXP = data.totalXP;
+          store.level = calculateRank(store.totalXP);
+        }
+        updateBadgeUI();
+      });
+    } catch (e) {
+      // Extension context invalidated during dev reload
+    }
   }
 
   // 3. Mount Isolated Shadow DOM Container safely when DOM is ready
@@ -236,6 +250,21 @@
         <button class="btn-close" id="btn-close">&times;</button>
       </div>
       <div class="card-body">
+        <!-- Dual Scorecard Banner -->
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+          <div style="flex:1; background:#0f172a; padding:8px 10px; border-radius:6px; border:1px solid #38bdf8;">
+            <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:600;">This Tab Session</div>
+            <div style="font-size:15px; font-weight:700; color:#38bdf8;" id="tab-score">⚡ 0m saved</div>
+            <div style="font-size:10px; color:#64748b;" id="tab-bug-count">0 bugs caught</div>
+          </div>
+          <div style="flex:1; background:#0f172a; padding:8px 10px; border-radius:6px; border:1px solid #334155;">
+            <div style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:600;">Lifetime RoI</div>
+            <div style="font-size:15px; font-weight:700; color:#4ade80;" id="lifetime-score">🏆 0m saved</div>
+            <div style="font-size:10px; color:#64748b;" id="lifetime-bug-count">Cumulative across tabs</div>
+          </div>
+        </div>
+        <button class="btn-action" id="btn-reset-tab" style="background:#334155; font-size:11px; padding:3px 8px; margin-bottom:12px; margin-top:0;">🔄 Reset This Tab to 0m</button>
+
         <div class="section-title">Component Breadcrumbs (Decompiled)</div>
         <div class="breadcrumbs-box" id="comp-breadcrumbs">Root > Scanning DOM...</div>
 
@@ -284,11 +313,39 @@
   const btnLiveFix = shadow.getElementById('btn-live-fix');
   const eventList = shadow.getElementById('event-list');
 
+  const tabScoreEl = shadow.getElementById('tab-score');
+  const tabBugEl = shadow.getElementById('tab-bug-count');
+  const lifetimeScoreEl = shadow.getElementById('lifetime-score');
+  const lifetimeBugEl = shadow.getElementById('lifetime-bug-count');
+  const btnResetTab = shadow.getElementById('btn-reset-tab');
+
   updateBadgeUI = function () {
-    if (roiCounter) roiCounter.textContent = `⚡ ${store.minutesSaved}m saved`;
+    if (roiCounter) {
+      roiCounter.textContent = store.tabMinutesSaved > 0 
+        ? `⚡ +${store.tabMinutesSaved}m this tab` 
+        : `⚡ 0m this tab`;
+    }
     if (levelPill) levelPill.textContent = store.level;
+
+    if (tabScoreEl) tabScoreEl.textContent = `⚡ +${store.tabMinutesSaved}m saved`;
+    if (tabBugEl) tabBugEl.textContent = `${store.tabBugsCaught} bugs caught`;
+    if (lifetimeScoreEl) lifetimeScoreEl.textContent = `🏆 ${store.lifetimeMinutesSaved}m saved`;
+    if (lifetimeBugEl) lifetimeBugEl.textContent = `~${(store.lifetimeMinutesSaved / 60).toFixed(1)} hrs across tabs`;
+
+    if (badge) {
+      badge.title = `⚡ This Tab: +${store.tabMinutesSaved}m saved (${store.tabBugsCaught} bugs)\n🏆 Lifetime: ${store.lifetimeMinutesSaved}m (~${(store.lifetimeMinutesSaved / 60).toFixed(1)} hrs)\n🎖️ Rank: ${store.level} (${store.totalXP} XP)\n\nClick to open Triage Card`;
+    }
   };
   updateBadgeUI();
+
+  if (btnResetTab) {
+    btnResetTab.addEventListener('click', (e) => {
+      e.stopPropagation();
+      store.tabMinutesSaved = 0;
+      store.tabBugsCaught = 0;
+      updateBadgeUI();
+    });
+  }
 
   // Toggle Modal
   badge.addEventListener('click', () => {
@@ -342,16 +399,25 @@
     if (!event.data) return;
 
     function awardRoI(minutes, xp) {
-      store.minutesSaved += minutes;
+      store.tabMinutesSaved += minutes;
+      store.tabBugsCaught += 1;
+      store.lifetimeMinutesSaved += minutes;
+      store.lifetimeBugsCaught += 1;
       store.totalXP += xp;
       store.level = calculateRank(store.totalXP);
       updateBadgeUI();
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({
-          minutesSaved: store.minutesSaved,
-          totalXP: store.totalXP,
-          level: store.level
-        });
+
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && chrome.storage && chrome.storage.local) {
+        try {
+          chrome.storage.local.set({
+            lifetimeMinutesSaved: store.lifetimeMinutesSaved,
+            lifetimeBugsCaught: store.lifetimeBugsCaught,
+            totalXP: store.totalXP,
+            level: store.level
+          });
+        } catch (e) {
+          // Extension context invalidated during dev reload
+        }
       }
     }
 
