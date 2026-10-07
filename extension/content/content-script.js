@@ -30,6 +30,7 @@
   const store = {
     events: [],
     networkLogs: [],
+    pendingFixes: [],
     tabMinutesSaved: 0,
     tabBugsCaught: 0,
     lifetimeMinutesSaved: 0,
@@ -281,13 +282,13 @@
         <button class="btn-action" id="btn-apply-tamper">Re-inject & Replay Payload</button>
 
         <div class="section-title">In-Situ Auto-Remediation (CSS & Script Fixes)</div>
-        <div id="remediation-box" style="background:#1e293b; padding:8px; border-radius:6px; font-family:monospace; font-size:11px; margin-bottom:6px; color:#fde047;">
+        <div id="remediation-box" style="background:#1e293b; padding:8px; border-radius:6px; font-family:monospace; font-size:11px; margin-bottom:6px; color:#fde047; max-height:160px; overflow-y:auto;">
           No active repair needed.
         </div>
         <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">
-          <button class="btn-action" id="btn-live-fix" style="background:#16a34a; display:none;">🛠️ Auto-Fix in Live DOM</button>
-          <button class="btn-action" id="btn-disk-patch" style="background:#8b5cf6; display:none;">💾 1-Click Patch Source on Disk</button>
-          <button class="btn-action" id="btn-copy-diff" style="background:#475569; display:none;">📋 Copy Diff</button>
+          <button class="btn-action" id="btn-fix-all-live" style="background:#16a34a; display:none;">✨ Auto-Fix All in Live DOM (1-Shot)</button>
+          <button class="btn-action" id="btn-patch-all-disk" style="background:#8b5cf6; display:none;">💾 1-Click Patch All to Disk</button>
+          <button class="btn-action" id="btn-copy-diff" style="background:#475569; display:none;">📋 Copy Unified Diff</button>
         </div>
         <div id="workspace-status" style="font-size:10px; color:#94a3b8; margin-top:6px; font-family:monospace;">
           📁 Workspace: <span id="workspace-name" style="color:#fde047;">Not connected</span> 
@@ -319,21 +320,51 @@
   const tamperJson = shadow.getElementById('tamper-json');
   const btnTamper = shadow.getElementById('btn-apply-tamper');
   const remediationBox = shadow.getElementById('remediation-box');
-  const btnLiveFix = shadow.getElementById('btn-live-fix');
   const eventList = shadow.getElementById('event-list');
-
+  const btnFixAllLive = shadow.getElementById('btn-fix-all-live');
+  const btnPatchAllDisk = shadow.getElementById('btn-patch-all-disk');
+  const btnCopyDiff = shadow.getElementById('btn-copy-diff');
   const tabScoreEl = shadow.getElementById('tab-score');
   const tabBugEl = shadow.getElementById('tab-bug-count');
   const lifetimeScoreEl = shadow.getElementById('lifetime-score');
   const lifetimeBugEl = shadow.getElementById('lifetime-bug-count');
   const btnResetTab = shadow.getElementById('btn-reset-tab');
-  const btnDiskPatch = shadow.getElementById('btn-disk-patch');
-  const btnCopyDiff = shadow.getElementById('btn-copy-diff');
   const workspaceNameEl = shadow.getElementById('workspace-name');
   const linkConnectWs = shadow.getElementById('link-connect-ws');
 
-  let activePatch = null;
   let workspaceDirHandle = null;
+
+  function renderFixQueue() {
+    if (store.pendingFixes.length === 0) {
+      remediationBox.innerHTML = 'No active repair needed.';
+      btnFixAllLive.style.display = 'none';
+      btnPatchAllDisk.style.display = 'none';
+      btnCopyDiff.style.display = 'none';
+      return;
+    }
+
+    const cssCount = store.pendingFixes.filter(f => f.type === 'css').length;
+    const scriptCount = store.pendingFixes.filter(f => f.type === 'script').length;
+
+    let html = `<strong>⚠️ ${store.pendingFixes.length} Issue(s) Detected on Page:</strong><br/>`;
+    store.pendingFixes.forEach((fix, idx) => {
+      if (fix.type === 'css') {
+        html += `<div style="margin-top:4px; padding:3px 6px; background:#0f172a; border-radius:4px; border-left:3px solid #38bdf8;">` +
+                `<strong>#${idx + 1} CSS Collapse:</strong> ${fix.selector} &rarr; <code>flex-shrink: 0; min-width: fit-content;</code></div>`;
+      } else {
+        html += `<div style="margin-top:4px; padding:3px 6px; background:#0f172a; border-radius:4px; border-left:3px solid #ef4444;">` +
+                `<strong>#${idx + 1} Script Crash:</strong> ${fix.filename || 'script'}:${fix.lineno || 1} &rarr; <code>${fix.message || 'TypeError'}</code></div>`;
+      }
+    });
+
+    remediationBox.innerHTML = html;
+    btnFixAllLive.style.display = cssCount > 0 ? 'inline-block' : 'none';
+    btnFixAllLive.textContent = `✨ Auto-Fix ${cssCount} CSS Issue(s) in Live DOM (1-Shot)`;
+    btnPatchAllDisk.style.display = 'inline-block';
+    btnPatchAllDisk.textContent = `💾 1-Click Patch All (${store.pendingFixes.length}) to Disk`;
+    btnCopyDiff.style.display = 'inline-block';
+    btnCopyDiff.textContent = `📋 Copy Unified Diff (${store.pendingFixes.length})`;
+  }
 
   if (linkConnectWs) {
     linkConnectWs.addEventListener('click', async (e) => {
@@ -484,81 +515,92 @@
       // Check if event is remediable (CSS defect or Script error)
       if (p.type === 'css_layout_defect') {
         const defect = p.details;
-        remediationBox.innerHTML = `<strong>CSS Layout Defect Detected:</strong><br/>${defect.message}<br/><code style="color:#67e8f9;">Fix: flex-shrink: 0; min-width: 0;</code>`;
-        
-        activePatch = {
-          type: 'css',
-          selector: defect.targetSelector,
-          diff: `/* CSS Hot-Patch for ${defect.targetSelector} */\n${defect.targetSelector} {\n+  flex-shrink: 0;\n+  min-width: fit-content;\n}`
-        };
-
-        btnLiveFix.style.display = 'inline-block';
-        btnDiskPatch.style.display = 'inline-block';
-        btnCopyDiff.style.display = 'inline-block';
-
-        btnLiveFix.onclick = () => {
-          const targetEl = document.querySelector(defect.targetSelector);
-          if (targetEl) {
-            targetEl.style.flexShrink = '0';
-            targetEl.style.minWidth = 'fit-content';
-            remediationBox.innerHTML = `<span style="color:#4ade80;">✅ Applied live DOM fix: flex-shrink: 0; min-width: fit-content;</span>`;
-            btnLiveFix.style.display = 'none';
-
-            // Award RoI on explicit user fix action
-            awardRoI(25, 50);
-          }
-        };
+        // Avoid duplicate entries for the same target selector
+        if (!store.pendingFixes.some(f => f.type === 'css' && f.selector === defect.targetSelector)) {
+          store.pendingFixes.push({
+            type: 'css',
+            selector: defect.targetSelector,
+            message: defect.message,
+            diff: `/* CSS Hot-Patch for ${defect.targetSelector} */\n${defect.targetSelector} {\n+  flex-shrink: 0;\n+  min-width: fit-content;\n}\n`
+          });
+          renderFixQueue();
+        }
       } else if (p.type === 'script_error' || p.type === 'unhandled_rejection') {
-        remediationBox.innerHTML = `<strong>Script Error Trapped:</strong><br/>${p.details.message}<br/><code style="color:#67e8f9;">Suggested Guard: (data || []).map(...) or data?.prop</code>`;
-        
-        activePatch = {
-          type: 'script',
-          filename: p.details.filename,
-          lineno: p.details.lineno,
-          diff: `// Guard at ${p.details.filename || 'script'}:${p.details.lineno || 1}\n- data.items.map(...)\n+ (data?.items || []).map(...)`
-        };
-
-        btnLiveFix.style.display = 'none';
-        btnDiskPatch.style.display = 'inline-block';
-        btnCopyDiff.style.display = 'inline-block';
-
+        const details = p.details;
+        const key = `${details.filename || 'script'}:${details.lineno || 1}`;
+        if (!store.pendingFixes.some(f => f.type === 'script' && f.key === key)) {
+          store.pendingFixes.push({
+            type: 'script',
+            key: key,
+            filename: details.filename,
+            lineno: details.lineno,
+            message: details.message,
+            diff: `// Guard at ${details.filename || 'script'}:${details.lineno || 1}\n- data.items.map(...)\n+ (data?.items || []).map(...)\n`
+          });
+          renderFixQueue();
+        }
         // Award RoI on critical script crash detection
         awardRoI(42, 75);
       }
 
-      if (btnCopyDiff) {
-        btnCopyDiff.onclick = () => {
-          if (activePatch) {
-            navigator.clipboard.writeText(activePatch.diff).then(() => {
-              alert('Diff copied to clipboard!\n\n' + activePatch.diff);
-            });
+      // Wire 1-Shot Multi-Fix live DOM button
+      btnFixAllLive.onclick = () => {
+        const cssFixes = store.pendingFixes.filter(f => f.type === 'css');
+        let appliedCount = 0;
+        cssFixes.forEach(fix => {
+          const targetEl = document.querySelector(fix.selector);
+          if (targetEl) {
+            targetEl.style.flexShrink = '0';
+            targetEl.style.minWidth = 'fit-content';
+            appliedCount++;
           }
-        };
-      }
+        });
 
-      if (btnDiskPatch) {
-        btnDiskPatch.onclick = async () => {
-          if (!workspaceDirHandle) {
-            alert('Please connect your project folder first using "[Connect Project Folder]" above!');
-            return;
-          }
-          if (!activePatch) return;
+        // Remove applied CSS fixes from queue
+        store.pendingFixes = store.pendingFixes.filter(f => f.type !== 'css');
+        renderFixQueue();
 
-          try {
-            // Write a .goa-rover-fix.patch file to the root of their workspace project
-            const patchFileHandle = await workspaceDirHandle.getFileHandle('goa-rover-fix.patch', { create: true });
-            const writable = await patchFileHandle.createWritable();
-            await writable.write(activePatch.diff);
-            await writable.close();
+        if (appliedCount > 0) {
+          remediationBox.innerHTML += `<div style="color:#4ade80; margin-top:6px;">✅ 1-Shot Live DOM Fix applied to ${appliedCount} element(s)!</div>`;
+          awardRoI(25 * appliedCount, 50 * appliedCount);
+        }
+      };
 
-            remediationBox.innerHTML = `<span style="color:#a78bfa;">💾 Successfully written 'goa-rover-fix.patch' to project folder root!</span>`;
-            btnDiskPatch.style.display = 'none';
-            awardRoI(30, 60);
-          } catch (err) {
-            alert('File write failed: ' + (err ? err.message : err));
-          }
-        };
-      }
+      // Wire Unified Diff Copy button
+      btnCopyDiff.onclick = () => {
+        if (store.pendingFixes.length === 0) return;
+        const unifiedDiff = store.pendingFixes.map(f => f.diff).join('\n');
+        navigator.clipboard.writeText(unifiedDiff).then(() => {
+          alert(`Unified diff (${store.pendingFixes.length} fixes) copied to clipboard!\n\n` + unifiedDiff);
+        });
+      };
+
+      // Wire 1-Click Multi-Issue Disk Patch
+      btnPatchAllDisk.onclick = async () => {
+        if (!workspaceDirHandle) {
+          alert('Please connect your project folder first using "[Connect Project Folder]" above!');
+          return;
+        }
+        if (store.pendingFixes.length === 0) return;
+
+        try {
+          const patchCount = store.pendingFixes.length;
+          const unifiedDiff = store.pendingFixes.map(f => f.diff).join('\n');
+          const patchFileHandle = await workspaceDirHandle.getFileHandle('goa-rover-fix.patch', { create: true });
+          const writable = await patchFileHandle.createWritable();
+          await writable.write(unifiedDiff);
+          await writable.close();
+
+          remediationBox.innerHTML = `<span style="color:#a78bfa;">💾 Successfully written 'goa-rover-fix.patch' (${patchCount} fixes) to project root!</span>`;
+          store.pendingFixes = [];
+          btnPatchAllDisk.style.display = 'none';
+          btnFixAllLive.style.display = 'none';
+          btnCopyDiff.style.display = 'none';
+          awardRoI(30 * patchCount, 60 * patchCount);
+        } catch (err) {
+          alert('File write failed: ' + (err ? err.message : err));
+        }
+      };
     } else if (event.data.source === 'GOA_ROVER_NETWORK') {
       const net = event.data.payload;
       store.networkLogs.unshift(net);

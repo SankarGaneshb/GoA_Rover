@@ -72,12 +72,19 @@
     <h2>3. Legacy CSS & Script Errors (New In-Situ Remediation)</h2>
     <button id="btn-trigger-script-error" class="danger">💥 Trigger Uncaught TypeError (undefined.map)</button>
     <button id="btn-trigger-flex-collapse" class="danger">💥 Trigger Flexbox Child Collapse (0px width)</button>
+    <button id="btn-trigger-multiple" class="danger" style="background:#b91c1c;">💥💥 Trigger Multiple Issues at Once (Batch Demo)</button>
     <div id="flex-test-container" style="display:none; border:2px dashed #94a3b8; padding:8px; margin-top:8px;">
-      <div id="flex-parent" style="display:flex; width:300px; background:#e2e8f0; padding:4px;">
+      <div id="flex-parent" style="display:flex; width:300px; background:#e2e8f0; padding:4px; margin-bottom:6px;">
         <div id="flex-child-collapsed" style="flex-shrink:1; width:0; overflow:hidden; background:#ef4444; color:white; padding:4px;">
           Legacy Button Collapsed
         </div>
-        <div style="flex:1; background:#38bdf8; padding:4px;">Remaining Content</div>
+        <div style="flex:1; background:#38bdf8; padding:4px;">Remaining Content 1</div>
+      </div>
+      <div id="flex-parent-2" style="display:flex; width:300px; background:#e2e8f0; padding:4px;">
+        <div id="flex-child-collapsed-2" style="flex-shrink:1; width:0; overflow:hidden; background:#f97316; color:white; padding:4px;">
+          Legacy Icon Collapsed
+        </div>
+        <div style="flex:1; background:#38bdf8; padding:4px;">Remaining Content 2</div>
       </div>
     </div>
   </div>
@@ -185,6 +192,20 @@
       if (window.__GOA_ROVER_PERCEPTION__) {
         window.__GOA_ROVER_PERCEPTION__.scanDOMForCSSDefects(container);
       }
+    });
+
+    // 9. Trigger Multiple Issues at Once (Batch Demo)
+    document.getElementById('btn-trigger-multiple').addEventListener('click', () => {
+      const container = document.getElementById('flex-test-container');
+      container.style.display = 'block';
+      logEvent('Triggering multiple issues simultaneously: 2 flex collapses + 1 script error...');
+      if (window.__GOA_ROVER_PERCEPTION__) {
+        window.__GOA_ROVER_PERCEPTION__.scanDOMForCSSDefects(container);
+      }
+      setTimeout(() => {
+        let legacyData;
+        legacyData.items.map(item => item.id);
+      }, 50);
     });
   </script>
 </body>

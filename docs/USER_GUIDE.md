@@ -172,28 +172,47 @@ An API returns `data: null` instead of an array. In legacy code: `data.items.map
 
 ---
 
-## 6. Tutorial 4: In-Situ Auto-Fixing Collapsed CSS (Live Hot-Patch)
+## 6. Tutorial 4: In-Situ Auto-Remediation & 1-Shot Multi-Issue Fix
 
 ### The Problem
-A legacy button inside a flex container has `flex-shrink: 1` and missing width constraints, causing it to shrink down to **0px width** and vanish from the screen.
+A legacy page has **multiple bugs at once**—for example, two collapsed navigation buttons with `flex-shrink: 1` squishing down to 0px, and an uncaught script `TypeError` in legacy event handlers. Fixing them one-by-one by hand takes considerable time.
 
-### How to Try It:
-1. Under **"3. Legacy CSS & Script Errors"**, click **"💥 Trigger Flexbox Child Collapse (0px width)"**.
+### How to Try It (Batch 1-Shot Auto-Fix):
+1. Under **"3. Legacy CSS & Script Errors"**, click the red button:
+   * **`[ 💥💥 Trigger Multiple Issues at Once (Batch Demo) ]`**
 2. **What happens**:
-   * A dashed container appears. The red "Legacy Button Collapsed" button is squeezed down to 0px and invisible!
-   * The GoA_Rover CSS scanner detects the 0px collapse.
+   * Two legacy buttons collapse to 0px width simultaneously.
+   * A script `TypeError` fires in the background.
+   * The GoA_Rover badge turns **🔴 Red (Error)**.
 3. Open the **GoA_Rover Triage Card**:
    * Look at **IN-SITU AUTO-REMEDIATION**:
      ```text
-     CSS Layout Defect Detected:
-     Flex child collapsed to 0px width (DIV)
-     Fix: flex-shrink: 0; min-width: 0;
+     ⚠️ 3 Issue(s) Detected on Page:
+     #1 CSS Collapse: #flex-child-collapsed → flex-shrink: 0; min-width: fit-content;
+     #2 CSS Collapse: #flex-child-collapsed-2 → flex-shrink: 0; min-width: fit-content;
+     #3 Script Crash: testbed.html:206 → TypeError: Cannot read properties of undefined
      ```
-   * Notice the green button lights up: **`[ 🛠️ Auto-Fix in Live DOM ]`**.
-4. **Click the green "🛠️ Auto-Fix in Live DOM" button**:
-   * Look back at the dashed container on the page:
-   * **The red button instantly reappears and expands to full width!**
-   * The fix was applied live in the DOM without reloading or editing code!
+   * Notice the three batch remediation buttons light up:
+     * **`[ ✨ Auto-Fix 2 CSS Issue(s) in Live DOM (1-Shot) ]`**
+     * **`[ 💾 1-Click Patch All (3) to Disk ]`**
+     * **`[ 📋 Copy Unified Diff (3) ]`**
+
+### Two Ways to Resolve All Issues in One Shot:
+
+#### Way 1: 1-Shot Live DOM Hot-Patch (Instant Visual Repair)
+* Click **`[ ✨ Auto-Fix 2 CSS Issue(s) in Live DOM (1-Shot) ]`**.
+* Both collapsed elements instantly expand to full width in real time without refreshing!
+* Cumulative RoI and XP are awarded in one go.
+
+#### Way 2: 1-Click Patch All to Disk (Permanent Source Code Patch)
+1. Click **`[Connect Project Folder]`** in the card and select your local repo root directory using Chrome's native File System Access API.
+2. Click **`[ 💾 1-Click Patch All (3) to Disk ]`**.
+3. GoA_Rover compiles a unified patch covering all CSS fixes and script error defensive guards, then directly writes `goa-rover-fix.patch` into your repo root!
+4. Apply it in terminal whenever you want via:
+   ```bash
+   git apply goa-rover-fix.patch
+   ```
+5. Or click **`[ 📋 Copy Unified Diff (3) ]`** to copy the full combined patch straight to your clipboard.
 
 ---
 
