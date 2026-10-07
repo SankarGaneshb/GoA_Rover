@@ -28,10 +28,26 @@
       this.origXHROpen = null;
       this.origXHRSend = null;
 
+      this.messageHandler = null;
+
       if (this.options.autoInit) {
         this.initFetchProxy();
         this.initXHRProxy();
+        this.initMessageListener();
       }
+    }
+
+    initMessageListener() {
+      if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+      this.messageHandler = (event) => {
+        if (event.data && event.data.source === 'GOA_ROVER_APPLY_TAMPER') {
+          const { pattern, mock } = event.data.payload || {};
+          if (mock) {
+            this.setTamperRule(pattern || '', mock);
+          }
+        }
+      };
+      window.addEventListener('message', this.messageHandler);
     }
 
     onNetworkEvent(cb) {
@@ -220,6 +236,10 @@
         XMLHttpRequest.prototype.send = this.origXHRSend;
         this.origXHROpen = null;
         this.origXHRSend = null;
+      }
+      if (this.messageHandler && typeof window !== 'undefined') {
+        window.removeEventListener('message', this.messageHandler);
+        this.messageHandler = null;
       }
       this.tamperRules.clear();
       this.records = [];
