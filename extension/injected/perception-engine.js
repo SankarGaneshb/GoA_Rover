@@ -437,10 +437,24 @@
             const style = (typeof window !== 'undefined' && window.getComputedStyle) ? window.getComputedStyle(el) : null;
             if (!style || style.display === 'none' || style.visibility === 'hidden') continue;
 
+            // Check if any ancestor is hidden (e.g., inside display:none container)
+            let isAncestorHidden = false;
+            let ancestor = el.parentElement;
+            while (ancestor && ancestor !== document.body && ancestor !== document.documentElement) {
+              const aStyle = (typeof window !== 'undefined' && window.getComputedStyle) ? window.getComputedStyle(ancestor) : null;
+              if (aStyle && (aStyle.display === 'none' || aStyle.visibility === 'hidden')) {
+                isAncestorHidden = true;
+                break;
+              }
+              ancestor = ancestor.parentElement;
+            }
+            if (isAncestorHidden) continue;
+
             // 1. Flex collapse detection
             const parent = el.parentElement;
             if (parent && typeof window !== 'undefined' && window.getComputedStyle) {
               const parentStyle = window.getComputedStyle(parent);
+              if (parentStyle.display === 'none' || parentStyle.visibility === 'hidden') continue;
               if ((parentStyle.display === 'flex' || parentStyle.display === 'inline-flex') &&
                   parentStyle.flexDirection !== 'column') {
                 const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: el.offsetWidth || 0 };
