@@ -4,7 +4,8 @@
   "description": "In-situ developer guardian Chrome extension",
   "scripts": {
     "test": "jest --coverage",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "serve": "node serve.js"
   },
   "devDependencies": {
     "jest": "^29.7.0",
