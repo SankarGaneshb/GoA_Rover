@@ -1,7 +1,7 @@
 /**
  * GoA_Rover - Layer 5: Workspace File System Access Bridge
  * Uses the Web File System Access API (showDirectoryPicker) to directly
- * read, modify, and patch local source files in-situ without leaving the browser.
+ * read, modify, and patch local source files on-the-spot without leaving the browser.
  */
 
 (function (root, factory) {

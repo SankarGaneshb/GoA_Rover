@@ -25,6 +25,15 @@
   injectScript('injected/framework-decompiler.js');
   injectScript('lib/auto-fixer.js');
   injectScript('lib/fs-workspace.js');
+  injectScript('lib/license-manager.js');
+
+  const licenseMgr = typeof self.LicenseManager === 'function'
+    ? new self.LicenseManager(chrome?.storage?.local)
+    : (typeof window !== 'undefined' && typeof window.LicenseManager === 'function' ? new window.LicenseManager(chrome?.storage?.local) : null);
+
+  const localAutoFixer = typeof self.AutoFixer === 'function'
+    ? new self.AutoFixer()
+    : (typeof window !== 'undefined' && typeof window.AutoFixer === 'function' ? new window.AutoFixer() : null);
 
   // 2. State Store inside Content Script
   const store = {
@@ -37,6 +46,10 @@
     lifetimeBugsCaught: 0,
     totalXP: 0,
     level: 'Lvl 1 Scout',
+    tier: 'free',
+    isPro: false,
+    remainingTrialDays: 0,
+    lastGatedPerformance: null,
     isCardOpen: false,
     selectedEvent: null
   };
@@ -72,6 +85,22 @@
     } catch (e) {
       // Extension context invalidated during dev reload
     }
+  }
+
+  if (licenseMgr) {
+    licenseMgr.init().then((st) => {
+      store.tier = st.tier;
+      store.isPro = st.isPro;
+      store.remainingTrialDays = st.remainingTrialDays;
+      updateBadgeUI();
+    }).catch(() => {});
+
+    licenseMgr.onChange((st) => {
+      store.tier = st.tier;
+      store.isPro = st.isPro;
+      store.remainingTrialDays = st.remainingTrialDays;
+      updateBadgeUI();
+    });
   }
 
   // 3. Mount Isolated Shadow DOM Container safely when DOM is ready
@@ -248,9 +277,29 @@
 
     <div class="bug-card-modal" id="bug-modal">
       <div class="card-header">
-        <h3 id="modal-title">🛡️ GoA_Rover Triage Card</h3>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <h3 id="modal-title" style="margin:0; font-size:14px; color:#38bdf8;">🛡️ GoA_Rover Triage Card</h3>
+          <span id="header-tier-pill" style="font-size:10px; font-weight:700; background:#334155; color:#94a3b8; padding:2px 8px; border-radius:12px;">Free</span>
+        </div>
         <button class="btn-close" id="btn-close">&times;</button>
       </div>
+
+      <!-- Admin Contact Modal Dialog -->
+      <div id="admin-dialog" style="display:none; position:absolute; top:46px; left:12px; right:12px; background:#0f172a; border:1px solid #38bdf8; border-radius:8px; padding:12px; box-shadow:0 15px 30px rgba(0,0,0,0.85); z-index:9999;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <strong style="color:#38bdf8; font-size:12px;">✉️ Contact Administrator for Pro License</strong>
+          <button class="btn-close" id="btn-close-admin" style="font-size:16px;">&times;</button>
+        </div>
+        <p style="font-size:11px; color:#cbd5e1; margin-bottom:8px; line-height:1.4;">
+          Send this pre-filled license request to your engineering administrator to unlock GoA_Rover Pro:
+        </p>
+        <textarea id="admin-request-text" readonly style="width:100%; height:65px; background:#1e293b; border:1px solid #334155; color:#f8fafc; font-family:monospace; font-size:10px; padding:6px; border-radius:4px; resize:none;">Hi Admin,&#10;&#10;I am diagnosing performance bottlenecks and main-thread freezes on my local project (${location.origin}). Please assign a GoA_Rover Pro license seat to my workstation.</textarea>
+        <div style="display:flex; gap:6px; margin-top:8px;">
+          <button class="btn-action" id="btn-copy-admin-msg" style="background:#0284c7; font-size:11px; padding:4px 8px; margin:0;">📋 Copy Request</button>
+          <a id="btn-email-admin" href="mailto:admin@company.com?subject=GoA_Rover%20Pro%20License%20Request" style="background:#16a34a; color:white; text-decoration:none; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; display:inline-flex; align-items:center;">📧 Email Admin</a>
+        </div>
+      </div>
+
       <div class="card-body">
         <!-- Dual Scorecard Banner -->
         <div style="display:flex; gap:8px; margin-bottom:10px;">
@@ -282,7 +331,7 @@
         <button class="btn-action" id="btn-apply-tamper">Re-inject & Replay Payload</button>
 
         <div class="section-title">On-the-Spot Auto-Remediation (Human-in-the-Loop Approval Required)</div>
-        <div id="remediation-box" style="background:#1e293b; padding:8px; border-radius:6px; font-family:monospace; font-size:11px; margin-bottom:6px; color:#fde047; max-height:160px; overflow-y:auto;">
+        <div id="remediation-box" style="background:#1e293b; padding:8px; border-radius:6px; font-family:monospace; font-size:11px; margin-bottom:6px; color:#fde047; max-height:220px; overflow-y:auto;">
           No active repair needed.
         </div>
 
@@ -321,6 +370,7 @@
       <div class="status-dot" id="status-indicator"></div>
       <span class="roi-text" id="roi-counter">⚡ 0m saved</span>
       <span class="level-pill" id="level-pill">Lvl 1 Scout</span>
+      <span class="level-pill" id="badge-tier-pill" style="background:#334155; color:#94a3b8; font-weight:600;">Free</span>
     </div>
   `;
 
@@ -331,6 +381,11 @@
   const statusDot = shadow.getElementById('status-indicator');
   const roiCounter = shadow.getElementById('roi-counter');
   const levelPill = shadow.getElementById('level-pill');
+  const headerTierPill = shadow.getElementById('header-tier-pill');
+  const badgeTierPill = shadow.getElementById('badge-tier-pill');
+  const adminDialog = shadow.getElementById('admin-dialog');
+  const btnCloseAdmin = shadow.getElementById('btn-close-admin');
+  const btnCopyAdminMsg = shadow.getElementById('btn-copy-admin-msg');
   const breadcrumbsEl = shadow.getElementById('comp-breadcrumbs');
   const slider = shadow.getElementById('scrubber-slider');
   const scrubberTime = shadow.getElementById('scrubber-time');
@@ -358,8 +413,174 @@
   let workspaceDirHandle = null;
   let pendingHilAction = null; // Holds callback to execute once developer explicitly approves
 
+  function unlockGatedFeature(p) {
+    const targetEvent = p || store.lastGatedPerformance;
+    store.lastGatedPerformance = null;
+    if (targetEvent) {
+      const isStreamlit = location.port === '8501' || Boolean(document.querySelector('.stApp'));
+      const context = {
+        framework: (window.__GOA_ROVER_DECOMPILER__ && window.__GOA_ROVER_DECOMPILER__.decompile(document.body).framework) || (isStreamlit ? 'streamlit' : 'vanilla'),
+        isStreamlit: isStreamlit,
+        port: location.port
+      };
+      const fixer = localAutoFixer || (window.__GOA_ROVER_AUTO_FIXER__ ? window.__GOA_ROVER_AUTO_FIXER__ : null);
+      const diag = fixer && typeof fixer.diagnosePerformanceAnomaly === 'function'
+        ? fixer.diagnosePerformanceAnomaly(targetEvent, context)
+        : {
+            title: isStreamlit ? 'Streamlit Main-Thread Freeze' : 'Performance Optimization',
+            diagnostic: targetEvent.details?.message || 'Main thread freeze',
+            recommendations: isStreamlit ? ['Use @st.cache_data for heavy queries', 'Paginate tables with st.dataframe(df.head(100))'] : ['Chunk heavy computations with scheduler.yield()'],
+            diffSnippet: isStreamlit
+              ? '### Streamlit Performance Optimization Patch\n+ @st.cache_data\n+ def load_data():\n+     return fetch_expensive_dataset()\n- st.dataframe(large_df)\n+ st.dataframe(large_df.head(100))'
+              : '// Performance Optimization\n- for (const item of dataset) { process(item); }\n+ for (const item of dataset) {\n+   process(item);\n+   if (performance.now() - lastYield > 16) await new Promise(r => setTimeout(r, 0));\n+ }'
+          };
+
+      const key = `perf:${targetEvent.type}:${Math.round(targetEvent.details?.duration || targetEvent.details?.mutationsCount || 0)}`;
+      if (!store.pendingFixes.some(f => f.key === key)) {
+        store.pendingFixes.push({
+          type: 'performance',
+          key: key,
+          title: diag.title,
+          diagnostic: diag.diagnostic,
+          recommendations: diag.recommendations,
+          suggestedCode: diag.suggestedCode,
+          diff: diag.diffSnippet,
+          selected: true
+        });
+      }
+    }
+    renderFixQueue();
+    updateBadgeUI();
+  }
+
+  function renderGatedBanner(p) {
+    const isLoaf = p.type === 'loaf_jank';
+    const metricText = isLoaf 
+      ? `Main-thread freeze of <strong style="color:#ef4444;">${p.details?.duration ? p.details.duration.toFixed(1) : '50+'}ms</strong> detected` 
+      : `High DOM churn velocity of <strong style="color:#f59e0b;">${p.details?.mutationsCount || 150}+ mutations/sec</strong> detected`;
+
+    remediationBox.innerHTML = `
+      <div style="background:#0b1329; border:1px solid #eab308; border-radius:6px; padding:10px; margin-bottom:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <strong style="color:#fde047; font-size:12px;">🔒 Premium: Performance & LoAF Auto-Remediation</strong>
+          <span style="background:#eab308; color:#0f172a; font-weight:700; font-size:9px; padding:2px 6px; border-radius:4px; text-transform:uppercase;">Pro Feature</span>
+        </div>
+        <div style="font-size:11px; color:#cbd5e1; line-height:1.4; margin-bottom:8px;">
+          ${metricText}. Unlock 1-click optimization diffs for <code>goa-rover-fix.patch</code>, framework-specific patches (Streamlit / React), and root-cause culprit profiling.
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
+          <button class="btn-action" id="btn-start-trial" style="background:#0284c7; font-size:11px; padding:5px 9px; margin:0;">⚡ Start 5-Day Free Pro Trial</button>
+          <button class="btn-action" id="btn-show-key-input" style="background:#334155; font-size:11px; padding:5px 9px; margin:0;">🔑 Enter License Key</button>
+          <button class="btn-action" id="btn-open-admin" style="background:#1e293b; color:#38bdf8; border:1px solid #38bdf8; font-size:11px; padding:4px 8px; margin:0;">✉️ Contact Admin</button>
+        </div>
+        <div id="key-input-panel" style="display:none; margin-top:8px; padding-top:6px; border-top:1px solid #334155;">
+          <input type="text" id="license-key-field" placeholder="Enter license key (e.g. ROVER-PRO-2026)..." style="background:#1e293b; border:1px solid #475569; color:#f8fafc; font-family:monospace; padding:4px 8px; border-radius:4px; font-size:11px; width:65%;" />
+          <button class="btn-action" id="btn-submit-key" style="background:#16a34a; font-size:11px; padding:4px 8px; margin:0 0 0 4px;">Activate</button>
+        </div>
+      </div>
+    `;
+
+    if (hilApprovalCard) hilApprovalCard.style.display = 'none';
+    if (btnFixBoth) btnFixBoth.style.display = 'none';
+    if (btnFixAllLive) btnFixAllLive.style.display = 'none';
+    if (btnPatchAllDisk) btnPatchAllDisk.style.display = 'none';
+    if (btnCopyDiff) btnCopyDiff.style.display = 'none';
+
+    // Wire listeners
+    const btnTrial = remediationBox.querySelector('#btn-start-trial');
+    const btnShowKey = remediationBox.querySelector('#btn-show-key-input');
+    const btnOpenAdmin = remediationBox.querySelector('#btn-open-admin');
+    const keyPanel = remediationBox.querySelector('#key-input-panel');
+    const keyField = remediationBox.querySelector('#license-key-field');
+    const btnSubmitKey = remediationBox.querySelector('#btn-submit-key');
+
+    if (btnTrial) {
+      btnTrial.onclick = async () => {
+        if (licenseMgr) {
+          const st = await licenseMgr.startTrial();
+          store.tier = st.tier;
+          store.isPro = st.isPro;
+          store.remainingTrialDays = st.remainingTrialDays;
+        } else {
+          store.tier = 'trial';
+          store.isPro = true;
+          store.remainingTrialDays = 5;
+        }
+        updateBadgeUI();
+        unlockGatedFeature(p);
+      };
+    }
+
+    if (btnShowKey) {
+      btnShowKey.onclick = () => {
+        keyPanel.style.display = keyPanel.style.display === 'none' ? 'block' : 'none';
+      };
+    }
+
+    if (btnSubmitKey) {
+      btnSubmitKey.onclick = async () => {
+        const keyVal = (keyField ? keyField.value : '').trim();
+        if (licenseMgr) {
+          const res = await licenseMgr.activateLicenseKey(keyVal);
+          if (res.success) {
+            const st = licenseMgr.getStatus();
+            store.tier = st.tier;
+            store.isPro = st.isPro;
+            store.remainingTrialDays = st.remainingTrialDays;
+            updateBadgeUI();
+            unlockGatedFeature(p);
+          } else {
+            alert(res.error || 'Invalid license key.');
+          }
+        } else {
+          if (keyVal.length >= 6) {
+            store.tier = 'pro';
+            store.isPro = true;
+            updateBadgeUI();
+            unlockGatedFeature(p);
+          } else {
+            alert('Invalid license key format.');
+          }
+        }
+      };
+    }
+
+    if (btnOpenAdmin) {
+      btnOpenAdmin.onclick = () => {
+        openAdminModal();
+      };
+    }
+  }
+
+  function openAdminModal() {
+    if (adminDialog) {
+      adminDialog.style.display = 'block';
+    }
+  }
+
+  if (btnCloseAdmin) {
+    btnCloseAdmin.onclick = () => {
+      if (adminDialog) adminDialog.style.display = 'none';
+    };
+  }
+
+  if (btnCopyAdminMsg) {
+    btnCopyAdminMsg.onclick = () => {
+      const textarea = shadow.getElementById('admin-request-text');
+      if (textarea) {
+        navigator.clipboard.writeText(textarea.value).then(() => {
+          alert('Admin license request message copied to clipboard!');
+        });
+      }
+    };
+  }
+
   function renderFixQueue() {
     if (store.pendingFixes.length === 0) {
+      if (store.lastGatedPerformance && !store.isPro) {
+        renderGatedBanner(store.lastGatedPerformance);
+        return;
+      }
       remediationBox.innerHTML = 'No active repair needed.';
       if (hilApprovalCard) hilApprovalCard.style.display = 'none';
       if (btnFixBoth) btnFixBoth.style.display = 'none';
@@ -371,6 +592,7 @@
 
     const cssCount = store.pendingFixes.filter(f => f.type === 'css').length;
     const scriptCount = store.pendingFixes.filter(f => f.type === 'script').length;
+    const perfCount = store.pendingFixes.filter(f => f.type === 'performance').length;
 
     let html = `<strong>⚠️ ${store.pendingFixes.length} Issue(s) Detected on Page:</strong><br/>`;
     store.pendingFixes.forEach((fix, idx) => {
@@ -379,10 +601,17 @@
         html += `<div style="display:flex; align-items:flex-start; gap:6px; margin-top:4px; padding:4px 6px; background:#0f172a; border-radius:4px; border-left:3px solid #38bdf8;">` +
                 `<input type="checkbox" class="fix-check" data-idx="${idx}" ${isChecked} style="margin-top:2px;" />` +
                 `<div><strong>#${idx + 1} CSS Collapse:</strong> ${fix.selector}<br/><code style="color:#67e8f9;">flex-shrink: 0; min-width: fit-content;</code></div></div>`;
-      } else {
+      } else if (fix.type === 'script') {
         html += `<div style="display:flex; align-items:flex-start; gap:6px; margin-top:4px; padding:4px 6px; background:#0f172a; border-radius:4px; border-left:3px solid #ef4444;">` +
                 `<input type="checkbox" class="fix-check" data-idx="${idx}" ${isChecked} style="margin-top:2px;" />` +
                 `<div><strong>#${idx + 1} Script Crash:</strong> ${fix.filename || 'script'}:${fix.lineno || 1}<br/><code style="color:#f87171;">${fix.message || 'TypeError'}</code></div></div>`;
+      } else if (fix.type === 'performance') {
+        html += `<div style="display:flex; align-items:flex-start; gap:6px; margin-top:4px; padding:6px; background:#0f172a; border-radius:4px; border-left:3px solid #eab308;">` +
+                `<input type="checkbox" class="fix-check" data-idx="${idx}" ${isChecked} style="margin-top:2px;" />` +
+                `<div style="flex:1;"><strong>⚡ #${idx + 1} ${fix.title || 'Performance Optimization'}:</strong><br/>` +
+                `<span style="color:#cbd5e1; font-size:10px; line-height:1.3;">${fix.diagnostic}</span><br/>` +
+                `<div style="margin-top:4px; color:#fde047; font-size:10px;"><strong>💡 Recommendation:</strong> ${fix.recommendations ? fix.recommendations[0] : 'Optimize main thread computation'}</div>` +
+                `</div></div>`;
       }
     });
 
@@ -435,13 +664,28 @@
     }
     if (levelPill) levelPill.textContent = store.level;
 
+    const tierLabel = store.tier === 'pro' 
+      ? '💎 Pro' 
+      : (store.tier === 'trial' ? `⭐ Pro Trial (${store.remainingTrialDays}d)` : 'Free');
+
+    if (badgeTierPill) {
+      badgeTierPill.textContent = tierLabel;
+      badgeTierPill.style.background = store.isPro ? '#16a34a' : (store.tier === 'trial' ? '#0284c7' : '#334155');
+      badgeTierPill.style.color = '#ffffff';
+    }
+    if (headerTierPill) {
+      headerTierPill.textContent = tierLabel;
+      headerTierPill.style.background = store.isPro ? '#16a34a' : (store.tier === 'trial' ? '#0284c7' : '#334155');
+      headerTierPill.style.color = '#ffffff';
+    }
+
     if (tabScoreEl) tabScoreEl.textContent = `⚡ +${store.tabMinutesSaved}m saved`;
     if (tabBugEl) tabBugEl.textContent = `${store.tabBugsCaught} bugs caught`;
     if (lifetimeScoreEl) lifetimeScoreEl.textContent = `🏆 ${store.lifetimeMinutesSaved}m saved`;
     if (lifetimeBugEl) lifetimeBugEl.textContent = `~${(store.lifetimeMinutesSaved / 60).toFixed(1)} hrs across tabs`;
 
     if (badge) {
-      badge.title = `⚡ This Tab: +${store.tabMinutesSaved}m saved (${store.tabBugsCaught} bugs)\n🏆 Lifetime: ${store.lifetimeMinutesSaved}m (~${(store.lifetimeMinutesSaved / 60).toFixed(1)} hrs)\n🎖️ Rank: ${store.level} (${store.totalXP} XP)\n\nClick to open Triage Card`;
+      badge.title = `⚡ This Tab: +${store.tabMinutesSaved}m saved (${store.tabBugsCaught} bugs)\n🏆 Lifetime: ${store.lifetimeMinutesSaved}m (~${(store.lifetimeMinutesSaved / 60).toFixed(1)} hrs)\n🎖️ Rank: ${store.level} (${store.totalXP} XP)\nPlan: ${tierLabel}\n\nClick to open Triage Card`;
     }
   };
   updateBadgeUI();
@@ -584,6 +828,44 @@
         }
         // Award RoI on critical script crash detection
         awardRoI(42, 75);
+      } else if (p.type === 'loaf_jank' || p.type === 'dom_churn') {
+        if (!store.isPro) {
+          store.lastGatedPerformance = p;
+          renderFixQueue();
+        } else {
+          const isStreamlit = location.port === '8501' || Boolean(document.querySelector('.stApp'));
+          const context = {
+            framework: (window.__GOA_ROVER_DECOMPILER__ && window.__GOA_ROVER_DECOMPILER__.decompile(document.body).framework) || (isStreamlit ? 'streamlit' : 'vanilla'),
+            isStreamlit: isStreamlit,
+            port: location.port
+          };
+          const fixer = localAutoFixer || (window.__GOA_ROVER_AUTO_FIXER__ ? window.__GOA_ROVER_AUTO_FIXER__ : null);
+          const diag = fixer && typeof fixer.diagnosePerformanceAnomaly === 'function'
+            ? fixer.diagnosePerformanceAnomaly(p, context)
+            : {
+                title: isStreamlit ? 'Streamlit Main-Thread Freeze' : 'Performance Optimization',
+                diagnostic: p.details?.message || 'Main thread freeze',
+                recommendations: isStreamlit ? ['Use @st.cache_data for heavy queries', 'Paginate tables with st.dataframe(df.head(100))'] : ['Chunk heavy computations with scheduler.yield()'],
+                diffSnippet: isStreamlit
+                  ? '### Streamlit Performance Optimization Patch\n+ @st.cache_data\n+ def load_data():\n+     return fetch_expensive_dataset()\n- st.dataframe(large_df)\n+ st.dataframe(large_df.head(100))'
+                  : '// Performance Optimization\n- for (const item of dataset) { process(item); }\n+ for (const item of dataset) {\n+   process(item);\n+   if (performance.now() - lastYield > 16) await new Promise(r => setTimeout(r, 0));\n+ }'
+              };
+
+          const key = `perf:${p.type}:${Math.round(p.details?.duration || p.details?.mutationsCount || 0)}`;
+          if (!store.pendingFixes.some(f => f.key === key)) {
+            store.pendingFixes.push({
+              type: 'performance',
+              key: key,
+              title: diag.title,
+              diagnostic: diag.diagnostic,
+              recommendations: diag.recommendations,
+              suggestedCode: diag.suggestedCode,
+              diff: diag.diffSnippet,
+              selected: true
+            });
+            renderFixQueue();
+          }
+        }
       }
 
       // Function to prompt Human-in-the-Loop decision

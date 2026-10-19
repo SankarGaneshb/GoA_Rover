@@ -1,7 +1,7 @@
 {
   "name": "goa-rover",
   "version": "1.0.0",
-  "description": "In-situ developer guardian Chrome extension",
+  "description": "On-the-spot developer guardian Chrome extension",
   "scripts": {
     "test": "jest --coverage",
     "test:watch": "jest --watch",

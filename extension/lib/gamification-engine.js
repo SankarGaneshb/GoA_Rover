@@ -39,7 +39,7 @@
       id: 'postman_slayer',
       title: 'Postman Slayer',
       icon: '🕵️',
-      description: 'Tampered & replayed 5 network payloads in-situ'
+      description: 'Tampered & replayed 5 network payloads on-the-spot'
     },
     FIBER_MASTER: {
       id: 'fiber_master',

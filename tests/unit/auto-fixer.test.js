@@ -52,7 +52,7 @@ describe('Layer 3: AutoFixer Engine', () => {
     });
   });
 
-  describe('Live In-Situ CSS Remediation', () => {
+  describe('Live On-the-Spot CSS Remediation', () => {
     test('applies live flex_collapse hot-patch directly to DOM element', () => {
       const div = document.createElement('div');
       div.style.flexShrink = '1';
@@ -99,6 +99,60 @@ describe('Layer 3: AutoFixer Engine', () => {
 
       const zIndexDiff = fixer.generateCSSDiff('#popup-modal', 'zindex_buried');
       expect(zIndexDiff).toContain('+  z-index: 9999;');
+    });
+  });
+
+  describe('Performance Anomaly Diagnosis', () => {
+    test('diagnoses Streamlit LoAF freeze with @st.cache_data and pagination diff', () => {
+      const event = {
+        type: 'loaf_jank',
+        severity: 'high',
+        details: { duration: 62.3, message: 'Main-thread freeze of 62.3ms detected' }
+      };
+      const context = { framework: 'streamlit', port: '8501', isStreamlit: true };
+
+      const diag = fixer.diagnosePerformanceAnomaly(event, context);
+      expect(diag.pattern).toBe('STREAMLIT_LOAF_FREEZE');
+      expect(diag.title).toContain('Streamlit Main-Thread Freeze');
+      expect(diag.diffSnippet).toContain('@st.cache_data');
+      expect(diag.diffSnippet).toContain('head(100)');
+      expect(diag.recommendations.length).toBeGreaterThan(0);
+    });
+
+    test('diagnoses React LoAF freeze with useMemo suggestion', () => {
+      const event = {
+        type: 'loaf_jank',
+        details: { duration: 75.0 }
+      };
+      const context = { framework: 'react' };
+
+      const diag = fixer.diagnosePerformanceAnomaly(event, context);
+      expect(diag.pattern).toBe('REACT_LOAF_FREEZE');
+      expect(diag.suggestedCode).toContain('useMemo');
+      expect(diag.diffSnippet).toContain('useMemo');
+    });
+
+    test('diagnoses DOM churn anomaly with DocumentFragment batching', () => {
+      const event = {
+        type: 'dom_churn',
+        details: { mutationsCount: 200 }
+      };
+
+      const diag = fixer.diagnosePerformanceAnomaly(event);
+      expect(diag.pattern).toBe('DOM_CHURN_THRASHING');
+      expect(diag.suggestedCode).toContain('DocumentFragment');
+      expect(diag.diffSnippet).toContain('createDocumentFragment');
+    });
+
+    test('diagnoses generic JS long loop freeze with scheduler.yield', () => {
+      const event = {
+        type: 'loaf_jank',
+        details: { duration: 120.0 }
+      };
+
+      const diag = fixer.diagnosePerformanceAnomaly(event, { framework: 'vanilla' });
+      expect(diag.pattern).toBe('SYNCHRONOUS_LOOP_FREEZE');
+      expect(diag.diffSnippet).toContain('setTimeout');
     });
   });
 });

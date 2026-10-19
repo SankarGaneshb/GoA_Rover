@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "GoA_Rover - In-Situ Developer Guardian",
+  "name": "GoA_Rover - On-the-Spot Developer Guardian",
   "version": "1.0.0",
-  "description": "Zero-friction in-situ developer sidecar for web apps. Replaces DevTools, Postman, and React DevTools.",
+  "description": "Zero-friction on-the-spot developer sidecar for web apps. Replaces DevTools, Postman, and React DevTools.",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
@@ -28,7 +28,11 @@
         "http://127.0.0.1/*",
         "http://[::1]/*"
       ],
-      "js": ["content/content-script.js"],
+      "js": [
+        "lib/auto-fixer.js",
+        "lib/license-manager.js",
+        "content/content-script.js"
+      ],
       "run_at": "document_start"
     }
   ],
@@ -40,7 +44,8 @@
         "injected/state-recorder.js",
         "injected/framework-decompiler.js",
         "lib/auto-fixer.js",
-        "lib/fs-workspace.js"
+        "lib/fs-workspace.js",
+        "lib/license-manager.js"
       ],
       "matches": [
         "http://localhost/*",

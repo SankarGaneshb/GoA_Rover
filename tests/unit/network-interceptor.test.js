@@ -56,10 +56,10 @@ describe('Layer 2: NetworkInterceptor', () => {
     expect(capturedRecord.tampered).toBe(false);
   });
 
-  test('applies tamper mock rule and short-circuits network request in-situ', async () => {
+  test('applies tamper mock rule and short-circuits network request on-the-spot', async () => {
     interceptor.setTamperRule('/broken-cart', {
       status: 200,
-      body: { items: [], message: 'mocked in-situ' }
+      body: { items: [], message: 'mocked on-the-spot' }
     });
 
     let capturedRecord = null;
@@ -70,7 +70,7 @@ describe('Layer 2: NetworkInterceptor', () => {
     const res = await window.fetch('https://api.example.com/broken-cart');
     const data = JSON.parse(await res.text());
 
-    expect(data.message).toBe('mocked in-situ');
+    expect(data.message).toBe('mocked on-the-spot');
     expect(capturedRecord).not.toBeNull();
     expect(capturedRecord.tampered).toBe(true);
     expect(capturedRecord.status).toBe(200);
